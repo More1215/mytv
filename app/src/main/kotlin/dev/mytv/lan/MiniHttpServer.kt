@@ -14,14 +14,16 @@ import java.net.SocketException
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import kotlin.concurrent.thread
 
 /**
  * Mini serveur web du réseau local, partagé par la sauvegarde et la saisie d'un portail depuis
  * le téléphone. Il ne vit que pendant que l'écran concerné est ouvert.
  *
- * Volontairement minimal (aucune bibliothèque) : un seul thread, une requête à la fois,
- * quelques Ko de mémoire. Suffisant pour un usage ponctuel par une seule personne, et sans
+ * Volontairement minimal (aucune bibliothèque) : 6 threads au plus, quelques Ko de mémoire. Suffisant pour un usage ponctuel par une seule personne, et sans
  * surcoût sur les petites machines.
  *
  * Sécurité :
@@ -57,6 +59,7 @@ class MiniHttpServer(
 
     val pin: String = (SecureRandom().nextInt(900_000) + 100_000).toString()
     private var server: ServerSocket? = null
+    private var workers: ExecutorService? = null
     @Volatile private var badPins = 0
 
     /** Démarre l'écoute et renvoie le port, ou null si impossible. */
@@ -70,10 +73,20 @@ class MiniHttpServer(
             return null
         }
         server = socket
+        // Quelques connexions en parallèle : les navigateurs (Chrome surtout) ouvrent des
+        // connexions « d'avance » sans rien envoyer, ou tentent d'abord HTTPS. Traitées une par
+        // une, elles bloquaient la vraie requête (page qui charge indéfiniment). 6 threads au plus :
+        // négligeable en mémoire, même sur une petite box.
+        val pool = Executors.newFixedThreadPool(MAX_PARALLEL) { r -> Thread(r, threadName).apply { isDaemon = true } }
+        workers = pool
         thread(name = threadName, isDaemon = true) {
             while (!socket.isClosed) {
                 val client = try { socket.accept() } catch (_: SocketException) { break }
-                runCatching { client.use { handle(it) } }
+                try {
+                    pool.execute { runCatching { client.use { handle(it) } } }
+                } catch (_: RejectedExecutionException) {
+                    runCatching { client.close() }
+                }
             }
         }
         return PORT
@@ -82,11 +95,19 @@ class MiniHttpServer(
     fun stop() {
         runCatching { server?.close() }
         server = null
+        workers?.shutdownNow()
+        workers = null
     }
 
     private fun handle(socket: Socket) {
-        socket.soTimeout = 15_000
+        // Délai court pour l'en-tête : une connexion muette ne monopolise pas un thread.
+        socket.soTimeout = 5_000
         val input = BufferedInputStream(socket.getInputStream())
+        // Tentative HTTPS (le navigateur essaie parfois https:// d'abord) : on coupe tout de
+        // suite, le navigateur se rabat aussitôt sur http:// au lieu d'attendre.
+        input.mark(1)
+        if (input.read() == TLS_HANDSHAKE) return
+        input.reset()
         val requestLine = readLine(input) ?: return
         val parts = requestLine.split(" ")
         val method = parts.getOrNull(0).orEmpty()
@@ -100,6 +121,14 @@ class MiniHttpServer(
         }
         val query = parsePairs(target.substringAfter('?', ""))
         val out = socket.getOutputStream()
+        socket.soTimeout = 30_000 // corps de requête (fichier de sauvegarde) : plus de marge
+
+        // Icône demandée automatiquement par tout navigateur, sans le code : ce n'est pas une
+        // erreur de code (sinon 5 rechargements de page suffisaient à couper le serveur).
+        if (target.substringBefore('?') == "/favicon.ico") {
+            respond(out, Response(204, "image/x-icon", ByteArray(0)))
+            return
+        }
 
         if (!checkPin(query["pin"] ?: headers["x-pin"])) {
             respond(out, Response.text(403, "Code incorrect."))
@@ -123,7 +152,7 @@ class MiniHttpServer(
 
     private fun respond(out: OutputStream, r: Response) {
         val status = when (r.code) {
-            200 -> "OK"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"; else -> "Error"
+            200 -> "OK"; 204 -> "No Content"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"; else -> "Error"
         }
         val head = buildString {
             append("HTTP/1.1 ${r.code} $status\r\n")
@@ -163,6 +192,8 @@ class MiniHttpServer(
     companion object {
         const val PORT = 8765
         private const val MAX_BAD_PIN = 5
+        private const val MAX_PARALLEL = 6
+        private const val TLS_HANDSHAKE = 0x16
 
         private fun parsePairs(q: String): Map<String, String> =
             q.split('&').filter { it.contains('=') }.associate {
