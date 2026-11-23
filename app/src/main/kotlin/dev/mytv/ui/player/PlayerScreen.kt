@@ -87,6 +87,8 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
     var bannerTrigger by remember { mutableIntStateOf(1) }
     var bannerVisible by remember { mutableStateOf(true) }
     val rootFocus = remember { FocusRequester() }
+    val browserFocus = remember { FocusRequester() }
+    var rootFocused by remember { mutableStateOf(false) }
 
     LaunchedEffect(bannerTrigger) {
         bannerVisible = true
@@ -127,10 +129,16 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
                 }
                 true
             }
+            .onFocusChanged { rootFocused = it.isFocused }
             .focusRequester(rootFocus)
             .focusable()
             .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown || browserOpen) return@onKeyEvent false
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                if (browserOpen) {
+                    // Filet de sécurité : sélecteur ouvert mais focus resté sur la racine ->
+                    // la première touche place le focus dans la liste au lieu d'être perdue.
+                    return@onKeyEvent rootFocused && event.key in BROWSER_NAV_KEYS && browserFocus.tryRequestFocus()
+                }
                 when (event.key) {
                     Key.DirectionUp, Key.ChannelUp -> { playback.zap(+1); true }
                     Key.DirectionDown, Key.ChannelDown -> { playback.zap(-1); true }
@@ -144,7 +152,8 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
         val player by playback.playerFlow.collectAsStateWithLifecycle()
         VideoSurface(player, Modifier.fillMaxSize())
 
-        if (state.isBuffering && state.error == null) {
+        // Masqué sous le sélecteur : il transparaissait au milieu de la liste des chaînes.
+        if (state.isBuffering && state.error == null && !browserOpen) {
             Text(
                 "Chargement…",
                 modifier = Modifier.align(Alignment.Center),
@@ -190,6 +199,7 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
                     browsedId?.let { playback.play(channel, it) }
                     browserOpen = false
                 },
+                focusFallback = browserFocus,
                 modifier = Modifier.align(Alignment.CenterStart),
             )
         }
@@ -262,6 +272,8 @@ private fun ChannelBrowser(
     playingId: Long?,
     onCategoryFocused: (String) -> Unit,
     onSelect: (Channel) -> Unit,
+    /** Posé sur la liste des chaînes : y envoie le focus (première chaîne visible). */
+    focusFallback: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val channelState = rememberLazyListState()
@@ -272,12 +284,21 @@ private fun ChannelBrowser(
     val targetIndex = playingIndex.coerceAtLeast(0)
 
     // À l'ouverture : focus sur la chaîne en cours (ou la première), catégorie visible.
+    // Avec un gros portail, la liste met plusieurs images à se mettre en place : une seule
+    // tentative échouait et laissait le sélecteur SANS focus (flèches et OK inopérants).
+    // On réessaie donc pendant ~1 s, puis on se rabat sur la première chaîne visible.
     LaunchedEffect(channels) {
         if (initialDone || channels.isNullOrEmpty()) return@LaunchedEffect
         categoryState.scrollToItem(categories.indexOfFirst { it.id == browsedCategoryId }.coerceAtLeast(0))
         channelState.scrollToItem((targetIndex - 3).coerceAtLeast(0))
-        withFrameNanos { }
-        initialDone = initialFocus.tryRequestFocus()
+        repeat(60) {
+            withFrameNanos { }
+            if (initialFocus.tryRequestFocus()) {
+                initialDone = true
+                return@LaunchedEffect
+            }
+        }
+        initialDone = focusFallback.tryRequestFocus()
     }
     // Nouvelle catégorie parcourue : la liste repart du haut.
     LaunchedEffect(browsedCategoryId) {
@@ -344,6 +365,7 @@ private fun ChannelBrowser(
                     state = channelState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .focusRequester(focusFallback)
                         .focusProperties { right = FocusRequester.Cancel }
                         .focusRestorer(),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -418,3 +440,8 @@ private fun ErrorPanel(
 }
 
 private const val BANNER_DURATION_MS = 5_000L
+
+private val BROWSER_NAV_KEYS = setOf(
+    Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,
+    Key.DirectionCenter, Key.Enter, Key.NumPadEnter,
+)
