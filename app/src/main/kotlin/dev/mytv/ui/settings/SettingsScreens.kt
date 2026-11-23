@@ -44,7 +44,7 @@ import dev.mytv.ui.common.tryRequestFocus
 import dev.mytv.ui.components.SingleLineText
 import dev.mytv.ui.theme.MyTvColors
 
-enum class SettingsSection { PORTALS, PLAYER, BACKUP }
+enum class SettingsSection { PORTALS, PLAYER, PRIVACY, BACKUP }
 
 // ======================================================================= Hub
 
@@ -60,6 +60,7 @@ fun SettingsScreen(onSection: (SettingsSection) -> Unit) {
             modifier = Modifier.focusRequester(first),
         )
         SettingsRow("Lecteur", "Format des chaînes, mémoire tampon, décodage vidéo", { onSection(SettingsSection.PLAYER) })
+        SettingsRow("Confidentialité", "VPN exigé ou non, ce que ton fournisseur d'accès peut voir", { onSection(SettingsSection.PRIVACY) })
         SettingsRow("Sauvegarde et restauration", "Portails, favoris et reprises, via ton PC ou ton téléphone", { onSection(SettingsSection.BACKUP) })
     }
 }
@@ -182,6 +183,38 @@ fun PlayerSettingsScreen(viewModel: PlayerSettingsViewModel = hiltViewModel()) {
             title = "Relancer la dernière chaîne au démarrage : ${if (s.resumeLastChannel) "Oui" else "Non"}",
             subtitle = if (s.resumeLastChannel) "L'appli s'ouvre directement sur la télé." else "L'appli s'ouvre sur l'accueil.",
             onClick = { viewModel.update { it.copy(resumeLastChannel = !it.resumeLastChannel) } },
+        )
+    }
+}
+
+// ======================================================================= Confidentialité
+
+@Composable
+fun PrivacySettingsScreen(viewModel: PrivacySettingsViewModel = hiltViewModel()) {
+    val p by viewModel.protection.collectAsStateWithLifecycle()
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { first.tryRequestFocus() }
+
+    Page("Confidentialité") {
+        Text(
+            if (p.vpnActive) "🔒 Un VPN est actif : ton fournisseur d'accès ne voit qu'une connexion chiffrée."
+            else "⚠ Aucun VPN actif sur cet appareil.",
+            color = if (p.vpnActive) MyTvColors.Success else MyTvColors.Error,
+        )
+        Spacer(Modifier.height(6.dp))
+        SettingsRow(
+            title = "Exiger un VPN : ${if (p.vpnRequired) "Oui" else "Non"}",
+            subtitle = if (p.vpnRequired) {
+                "Sans VPN, MyTV ne fait aucune connexion. Le plus sûr."
+            } else {
+                "MyTV se connecte même sans VPN : ton fournisseur d'accès voit les serveurs contactés."
+            },
+            onClick = viewModel::toggleRequired,
+            modifier = Modifier.focusRequester(first),
+        )
+        Text(
+            "Dans tous les cas, les adresses sont résolues en DNS chiffré et le portail passe en HTTPS dès qu'il le propose.",
+            color = MyTvColors.OnSurfaceMuted,
         )
     }
 }

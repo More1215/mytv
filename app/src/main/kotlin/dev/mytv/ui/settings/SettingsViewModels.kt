@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.mytv.domain.repository.NetworkProtection
+import dev.mytv.domain.usecase.ObserveNetworkProtectionUseCase
+import dev.mytv.domain.usecase.SetVpnRequiredUseCase
 import javax.inject.Inject
 
 data class PortalsUiState(
@@ -66,6 +69,20 @@ class PlayerSettingsViewModel @Inject constructor(
     val settings: StateFlow<PlayerSettings> = observeSettings()
 
     fun update(transform: (PlayerSettings) -> PlayerSettings) = viewModelScope.launch { updateSettings(transform) }
+}
+
+@HiltViewModel
+class PrivacySettingsViewModel @Inject constructor(
+    observeProtection: ObserveNetworkProtectionUseCase,
+    private val setVpnRequired: SetVpnRequiredUseCase,
+) : ViewModel() {
+    val protection: StateFlow<NetworkProtection> = observeProtection()
+
+    /**
+     * Réexiger le VPN alors qu'aucun n'est actif bascule aussitôt sur l'écran « VPN requis » :
+     * c'est le comportement attendu (même protection qu'au démarrage).
+     */
+    fun toggleRequired() = setVpnRequired(!protection.value.vpnRequired)
 }
 
 /** Valeur suivante d'une énumération, en boucle : OK fait défiler les choix d'un réglage. */

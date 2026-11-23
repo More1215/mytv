@@ -43,6 +43,12 @@
     <string name="vpn_required_steps">Ouvre ton application VPN sur le Fire TV, connecte-toi, puis reviens ici : MyTV reprend tout seul.</string>
     <string name="vpn_required_waiting">En attente du VPN…</string>
     <string name="vpn_required_quit">Quitter</string>
+    <string name="vpn_skip_button">Continuer sans VPN</string>
+    <string name="vpn_skip_title">Continuer sans VPN ?</string>
+    <string name="vpn_skip_body">Ton fournisseur d\'accès pourra voir à quels serveurs MyTV se connecte (le portail IPTV) et, si le portail n\'est pas en HTTPS, le contenu des échanges.</string>
+    <string name="vpn_skip_revert">Tu pourras réexiger le VPN à tout moment : Réglages → Confidentialité.</string>
+    <string name="vpn_skip_cancel">Annuler</string>
+    <string name="vpn_skip_confirm">Continuer sans VPN</string>
     <string name="error_timeout">Le portail ne répond pas (délai dépassé). Réessaie plus tard.</string>
     <string name="error_invalid_response">Le serveur répond, mais ce n\'est pas un portail Xtream Codes valide.</string>
     <string name="error_server">Erreur du serveur (HTTP %1$d).</string>

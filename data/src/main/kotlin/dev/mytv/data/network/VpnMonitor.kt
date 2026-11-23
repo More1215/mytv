@@ -36,8 +36,17 @@ class VpnMonitor @Inject constructor(
 
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
+    /**
+     * Choix « exiger un VPN » : SharedPreferences (lecture synchrone, quelques octets) car il doit
+     * être connu dès la toute première requête. Par défaut : VPN exigé en release.
+     */
+    private val prefs = context.getSharedPreferences("network_guard", Context.MODE_PRIVATE)
+
     private val _protection = MutableStateFlow(
-        NetworkProtection(vpnActive = currentlyOnVpn(), vpnRequired = BuildConfig.REQUIRE_VPN),
+        NetworkProtection(
+            vpnActive = currentlyOnVpn(),
+            vpnRequired = prefs.getBoolean(KEY_REQUIRE_VPN, BuildConfig.REQUIRE_VPN),
+        ),
     )
     override val protection: StateFlow<NetworkProtection> = _protection.asStateFlow()
 
@@ -53,10 +62,19 @@ class VpnMonitor @Inject constructor(
         })
     }
 
+    override fun setVpnRequired(required: Boolean) {
+        prefs.edit().putBoolean(KEY_REQUIRE_VPN, required).apply()
+        _protection.update { it.copy(vpnRequired = required) }
+    }
+
     /** Lu à chaque requête par le kill switch : doit être instantané et sans verrou. */
     fun isBlocked(): Boolean = _protection.value.blocked
 
     private fun setVpn(active: Boolean) = _protection.update { it.copy(vpnActive = active) }
+
+    private companion object {
+        const val KEY_REQUIRE_VPN = "require_vpn"
+    }
 
     private fun currentlyOnVpn(): Boolean {
         val cm = connectivity ?: return false

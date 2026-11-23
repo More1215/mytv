@@ -16,4 +16,7 @@ data class NetworkProtection(val vpnActive: Boolean, val vpnRequired: Boolean) {
 /** Implémenté par la couche data (surveillance du réseau Android + verrou OkHttp). */
 interface NetworkGuard {
     val protection: StateFlow<NetworkProtection>
+
+    /** Choix de l'utilisateur : exiger un VPN (kill switch) ou accepter de se connecter sans. Mémorisé. */
+    fun setVpnRequired(required: Boolean)
 }

@@ -35,6 +35,7 @@ import dev.mytv.domain.model.VodItem
 import dev.mytv.domain.repository.NetworkProtection
 import dev.mytv.domain.usecase.ObserveActivePortalUseCase
 import dev.mytv.domain.usecase.ObserveNetworkProtectionUseCase
+import dev.mytv.domain.usecase.SetVpnRequiredUseCase
 import dev.mytv.domain.usecase.UpgradePortalToHttpsUseCase
 import dev.mytv.domain.usecase.VodKind
 import dev.mytv.player.PlaybackViewModel
@@ -50,6 +51,7 @@ import dev.mytv.ui.privacy.VpnRequiredScreen
 import dev.mytv.ui.search.SearchScreen
 import dev.mytv.ui.settings.BackupScreen
 import dev.mytv.ui.settings.PlayerSettingsScreen
+import dev.mytv.ui.settings.PrivacySettingsScreen
 import dev.mytv.ui.settings.PortalsScreen
 import dev.mytv.ui.settings.SettingsScreen
 import dev.mytv.ui.settings.SettingsSection
@@ -80,6 +82,7 @@ private object Routes {
     const val SETTINGS_PORTALS = "settings/portals"
     const val SETTINGS_PLAYER = "settings/player"
     const val SETTINGS_BACKUP = "settings/backup"
+    const val SETTINGS_PRIVACY = "settings/privacy"
     val VOD_PLAYER = "vodplayer?" + listOf(
         VodPlayerViewModel.ARG_KEY, VodPlayerViewModel.ARG_EXT, VodPlayerViewModel.ARG_TITLE,
         VodPlayerViewModel.ARG_SUBTITLE, VodPlayerViewModel.ARG_IMAGE, VodPlayerViewModel.ARG_SERIES,
@@ -111,9 +114,13 @@ class StartViewModel @Inject constructor(
     observeActivePortal: ObserveActivePortalUseCase,
     upgradeToHttps: UpgradePortalToHttpsUseCase,
     observeProtection: ObserveNetworkProtectionUseCase,
+    private val setVpnRequired: SetVpnRequiredUseCase,
 ) : ViewModel() {
 
     val protection: StateFlow<NetworkProtection> = observeProtection()
+
+    /** « Continuer sans VPN » : choix explicite, mémorisé (réversible dans Réglages → Confidentialité). */
+    fun continueWithoutVpn() = setVpnRequired(false)
 
     /** null tant que la base n'a pas répondu (quelques ms), pour éviter un flash du formulaire. */
     val startRoute: StateFlow<String?> = flow {
@@ -149,7 +156,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
     // Au retour du VPN, la navigation repart de l'accueil.
     val protection by startViewModel.protection.collectAsStateWithLifecycle()
     if (protection.blocked) {
-        VpnRequiredScreen()
+        VpnRequiredScreen(onContinueWithoutVpn = startViewModel::continueWithoutVpn)
         return
     }
 
@@ -271,6 +278,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                         SettingsSection.PORTALS -> Routes.SETTINGS_PORTALS
                         SettingsSection.PLAYER -> Routes.SETTINGS_PLAYER
                         SettingsSection.BACKUP -> Routes.SETTINGS_BACKUP
+                        SettingsSection.PRIVACY -> Routes.SETTINGS_PRIVACY
                     },
                 )
             })
@@ -284,6 +292,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
             )
         }
         composable(Routes.SETTINGS_PLAYER) { PlayerSettingsScreen() }
+        composable(Routes.SETTINGS_PRIVACY) { PrivacySettingsScreen() }
         composable(Routes.SETTINGS_BACKUP) {
             // Après une restauration, l'accueil est recréé pour relire portails, favoris et reprises ;
             // sinon simple retour (ex. installation neuve : on revient au formulaire de portail).

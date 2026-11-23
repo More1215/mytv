@@ -9,3 +9,8 @@ import javax.inject.Inject
 class ObserveNetworkProtectionUseCase @Inject constructor(private val guard: NetworkGuard) {
     operator fun invoke(): StateFlow<NetworkProtection> = guard.protection
 }
+
+/** Active ou lève l'exigence d'un VPN (choix explicite de l'utilisateur, avec avertissement). */
+class SetVpnRequiredUseCase @Inject constructor(private val guard: NetworkGuard) {
+    operator fun invoke(required: Boolean) = guard.setVpnRequired(required)
+}
