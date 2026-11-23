@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône pour API 25 (avant les adaptive icons d'API 26). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/background" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MyTV</string>
+
+    <!-- Ajouter un portail -->
+    <string name="add_portal_title">Ajouter un portail</string>
+    <string name="add_portal_subtitle">Saisis les informations Xtream Codes fournies par ton fournisseur.</string>
+    <string name="field_name">Nom (facultatif)</string>
+    <string name="field_name_hint">Ex. : Mon IPTV</string>
+    <string name="field_url">URL du serveur</string>
+    <string name="field_url_hint">http://exemple.com:8080</string>
+    <string name="field_username">Nom d\'utilisateur</string>
+    <string name="field_password">Mot de passe</string>
+    <string name="field_empty">Non renseigné</string>
+    <string name="action_test">Tester la connexion</string>
+    <string name="action_save">Enregistrer et continuer</string>
+    <string name="status_testing">Connexion au portail…</string>
+    <string name="status_saving">Enregistrement…</string>
+    <string name="status_success">Connexion réussie</string>
+
+    <!-- Infos compte -->
+    <string name="account_status">Statut : %1$s</string>
+    <string name="account_expires">Expire le %1$s</string>
+    <string name="account_unlimited">Sans date d\'expiration</string>
+    <string name="account_connections">Connexions : %1$s / %2$s</string>
+    <string name="account_trial">Compte d\'essai</string>
+    <string name="connection_encrypted">🔒 Connexion chiffrée (HTTPS)</string>
+    <string name="connection_cleartext">⚠ Portail en HTTP non chiffré : utilise un VPN</string>
+
+    <!-- Erreurs -->
+    <string name="error_invalid_url">URL invalide. Exemple attendu : http://exemple.com:8080</string>
+    <string name="error_invalid_credentials">Nom d\'utilisateur ou mot de passe incorrect.</string>
+    <string name="error_account_unavailable">Compte inutilisable (%1$s). Contacte ton fournisseur.</string>
+    <string name="error_unreachable">Portail injoignable. Vérifie l\'URL et la connexion internet.</string>
+    <string name="error_vpn_required">Connexion bloquée : aucun VPN actif.</string>
+
+    <!-- Kill switch VPN -->
+    <string name="vpn_required_title">VPN requis</string>
+    <string name="vpn_required_body">Pour que ton fournisseur d\'accès ne voie pas où tu te connectes, MyTV ne communique qu\'à travers un VPN.\n\nAucune connexion n\'est faite tant qu\'il n\'est pas actif : ni portail, ni guide, ni vidéo, ni DNS.</string>
+    <string name="vpn_required_steps">Ouvre ton application VPN sur le Fire TV, connecte-toi, puis reviens ici : MyTV reprend tout seul.</string>
+    <string name="vpn_required_waiting">En attente du VPN…</string>
+    <string name="vpn_required_quit">Quitter</string>
+    <string name="error_timeout">Le portail ne répond pas (délai dépassé). Réessaie plus tard.</string>
+    <string name="error_invalid_response">Le serveur répond, mais ce n\'est pas un portail Xtream Codes valide.</string>
+    <string name="error_server">Erreur du serveur (HTTP %1$d).</string>
+    <string name="error_unknown">Erreur inattendue : %1$s</string>
+</resources>

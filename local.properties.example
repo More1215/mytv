@@ -1,0 +1,15 @@
+# Copie ce fichier en "local.properties" (ignoré par git) et adapte-le.
+# Ne mets JAMAIS tes identifiants dans un autre fichier du projet.
+
+# Chemin du SDK Android (Android Studio le remplit tout seul).
+sdk.dir=C\:\\Users\\TON_NOM\\AppData\\Local\\Android\\Sdk
+
+# Facultatif - pré-remplit le formulaire « Ajouter un portail » dans les builds DEBUG uniquement,
+# pour éviter de tout retaper à la télécommande. Jamais embarqué dans un APK release.
+mytv.debug.portalUrl=http://exemple.com:8080
+mytv.debug.username=
+mytv.debug.password=
+
+# Facultatif - DEBUG uniquement : lève le kill switch VPN pour tester sur l'émulateur (qui n'a pas
+# de VPN). Sans aucun effet sur un APK release, où le VPN est toujours obligatoire.
+# mytv.debug.allowNoVpn=true

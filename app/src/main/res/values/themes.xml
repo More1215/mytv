@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème de fenêtre minimal : tout le reste est dessiné par Compose. Fond noir = pas de flash blanc au lancement. -->
+    <style name="Theme.MyTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorBackground">@color/background</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

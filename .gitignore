@@ -1,0 +1,30 @@
+# --- Secrets et config locale : NE JAMAIS COMMITER ---
+local.properties
+keystore.properties
+*.jks
+*.keystore
+secrets.properties
+
+# --- Gradle / build
+.gradle/
+.kotlin/
+build/
+**/build/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# --- Vidéos de test générées par tools/fake_xtream.py
+tools/test_streams/
+
+# --- IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Claude Code (réglages locaux)
+.claude/settings.local.json
