@@ -27,6 +27,8 @@ sealed interface AppError {
     data object InvalidResponse : AppError
     /** Erreur HTTP côté serveur (5xx, 404...). */
     data class Server(val httpCode: Int) : AppError
+    /** Sauvegarde illisible : mauvaise phrase secrète, ou fichier qui n'est pas une sauvegarde MyTV. */
+    data object BackupUnreadable : AppError
     /** Filet de sécurité : cas non prévu. */
     data class Unknown(val message: String?) : AppError
 }

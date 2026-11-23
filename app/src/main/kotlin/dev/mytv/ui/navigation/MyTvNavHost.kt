@@ -46,6 +46,11 @@ import dev.mytv.ui.player.PlayerScreen
 import dev.mytv.ui.portal.AddPortalScreen
 import dev.mytv.ui.privacy.VpnRequiredScreen
 import dev.mytv.ui.search.SearchScreen
+import dev.mytv.ui.settings.BackupScreen
+import dev.mytv.ui.settings.PlayerSettingsScreen
+import dev.mytv.ui.settings.PortalsScreen
+import dev.mytv.ui.settings.SettingsScreen
+import dev.mytv.ui.settings.SettingsSection
 import dev.mytv.ui.theme.MyTvColors
 import dev.mytv.ui.vod.MovieDetailsScreen
 import dev.mytv.ui.vod.SeriesDetailsScreen
@@ -68,6 +73,10 @@ private object Routes {
     const val MOVIE = "movie/{id}"
     const val SERIES = "series/{id}"
     const val SEARCH = "search"
+    const val SETTINGS = "settings"
+    const val SETTINGS_PORTALS = "settings/portals"
+    const val SETTINGS_PLAYER = "settings/player"
+    const val SETTINGS_BACKUP = "settings/backup"
     val VOD_PLAYER = "vodplayer?" + listOf(
         VodPlayerViewModel.ARG_KEY, VodPlayerViewModel.ARG_EXT, VodPlayerViewModel.ARG_TITLE,
         VodPlayerViewModel.ARG_SUBTITLE, VodPlayerViewModel.ARG_IMAGE, VodPlayerViewModel.ARG_SERIES,
@@ -168,12 +177,9 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
     ) {
         composable(Routes.ADD_PORTAL) {
             AddPortalScreen(
-                onPortalSaved = {
-                    navController.navigate(Routes.HOME) {
-                        // Retour depuis l'accueil quitte l'appli au lieu de revenir au formulaire.
-                        popUpTo(navController.graph.id) { inclusive = true }
-                    }
-                },
+                // Retour depuis l'accueil quitte l'appli au lieu de revenir au formulaire.
+                onPortalSaved = { navController.restartAt(Routes.HOME) },
+                onRestore = { navController.navigate(Routes.SETTINGS_BACKUP) },
             )
         }
         composable(Routes.HOME) {
@@ -198,7 +204,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                     )
                 },
                 onResume = { point -> navController.openResume(point) },
-                onChangePortal = { navController.navigate(Routes.ADD_PORTAL) },
+                onChangePortal = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.LIVE) {
@@ -206,7 +212,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                 playback = playback,
                 onOpenPlayer = { navController.navigate(Routes.PLAYER) { launchSingleTop = true } },
                 onOpenGuide = { navController.navigate(Routes.guide(it)) },
-                onChangePortal = { navController.navigate(Routes.ADD_PORTAL) },
+                onChangePortal = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.PLAYER) {
@@ -240,6 +246,34 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
         composable(Routes.SERIES, arguments = listOf(navArgument("id") { type = NavType.StringType })) {
             SeriesDetailsScreen(onPlay = { item, fromStart -> navController.navigate(Routes.vodPlayer(item, fromStart)) })
         }
+        // ---------------------------------------------------------------- Réglages
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onSection = { section ->
+                navController.navigate(
+                    when (section) {
+                        SettingsSection.PORTALS -> Routes.SETTINGS_PORTALS
+                        SettingsSection.PLAYER -> Routes.SETTINGS_PLAYER
+                        SettingsSection.BACKUP -> Routes.SETTINGS_BACKUP
+                    },
+                )
+            })
+        }
+        composable(Routes.SETTINGS_PORTALS) {
+            PortalsScreen(
+                // Nouveau portail actif : on repart d'un accueil neuf (tous les écrans rechargés).
+                onPortalActivated = { navController.restartAt(Routes.HOME) },
+                onAddPortal = { navController.navigate(Routes.ADD_PORTAL) },
+                onNoPortalLeft = { navController.restartAt(Routes.ADD_PORTAL) },
+            )
+        }
+        composable(Routes.SETTINGS_PLAYER) { PlayerSettingsScreen() }
+        composable(Routes.SETTINGS_BACKUP) {
+            // Après une restauration, l'accueil est recréé pour relire portails, favoris et reprises ;
+            // sinon simple retour (ex. installation neuve : on revient au formulaire de portail).
+            BackupScreen(onDone = { restored ->
+                if (restored) navController.restartAt(Routes.HOME) else navController.popBackStack()
+            })
+        }
         composable(Routes.SEARCH) {
             SearchScreen(onOpen = { kind, id -> navController.navigate(Routes.details(kind, id)) })
         }
@@ -254,6 +288,11 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
             VodPlayerScreen(onBack = { navController.popBackStack() })
         }
     }
+}
+
+/** Vide toute la pile de navigation et repart de [route] (changement de portail, restauration). */
+private fun NavHostController.restartAt(route: String) {
+    navigate(route) { popUpTo(graph.id) { inclusive = true } }
 }
 
 /** « Continuer à regarder » : ouvre la fiche (film, ou série pour un épisode) avec son bouton Reprendre. */

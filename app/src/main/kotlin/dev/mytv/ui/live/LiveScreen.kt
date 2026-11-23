@@ -231,10 +231,13 @@ fun LiveScreen(
 
         // ------------------------------------------------------------ Aperçu + infos
         Column(Modifier.width(300.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { selectedCategoryId?.let(onOpenGuide) }) { Text("Guide TV") }
-                OutlinedButton(onClick = viewModel::refresh) { Text("Actualiser") }
-                OutlinedButton(onClick = onChangePortal) { Text("Portail") }
+            // Colonne étroite : libellés courts, marges internes réduites et une seule ligne,
+            // sinon « Réglages » passe sur deux lignes ou est coupé.
+            val pad = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = { selectedCategoryId?.let(onOpenGuide) }, contentPadding = pad) { Text("Guide", maxLines = 1, softWrap = false) }
+                OutlinedButton(onClick = viewModel::refresh, contentPadding = pad) { Text("Actualiser", maxLines = 1, softWrap = false) }
+                OutlinedButton(onClick = onChangePortal, contentPadding = pad) { Text("Réglages", maxLines = 1, softWrap = false) }
             }
             Box(
                 Modifier
@@ -244,7 +247,8 @@ fun LiveScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 if (playbackState.channel != null) {
-                    VideoSurface(playback.player, Modifier.fillMaxSize(), embedded = true)
+                    val player by playback.playerFlow.collectAsStateWithLifecycle()
+                    VideoSurface(player, Modifier.fillMaxSize(), embedded = true)
                 } else {
                     Text("Aucune lecture", color = MyTvColors.OnSurfaceMuted)
                 }

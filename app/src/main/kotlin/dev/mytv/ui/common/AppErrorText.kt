@@ -18,6 +18,7 @@ fun AppError.toMessage(): String = when (this) {
     is AppError.AccountUnavailable -> stringResource(R.string.error_account_unavailable, status.lowercase())
     AppError.Unreachable -> stringResource(R.string.error_unreachable)
     AppError.VpnRequired -> stringResource(R.string.error_vpn_required)
+    AppError.BackupUnreadable -> stringResource(R.string.error_backup_unreadable)
     AppError.Timeout -> stringResource(R.string.error_timeout)
     AppError.InvalidResponse -> stringResource(R.string.error_invalid_response)
     is AppError.Server -> stringResource(R.string.error_server, httpCode)

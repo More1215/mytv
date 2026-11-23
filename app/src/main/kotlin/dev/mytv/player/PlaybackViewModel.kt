@@ -21,6 +21,8 @@ import dev.mytv.domain.usecase.ObserveActivePortalUseCase
 import dev.mytv.domain.usecase.ObserveCategoriesUseCase
 import dev.mytv.domain.usecase.ObserveChannelsUseCase
 import dev.mytv.domain.usecase.ObserveNetworkProtectionUseCase
+import dev.mytv.domain.usecase.ObservePlayerSettingsUseCase
+import dev.mytv.domain.model.PlayerSettings
 import dev.mytv.domain.usecase.ObserveNowNextUseCase
 import dev.mytv.domain.usecase.ToggleFavoriteUseCase
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -65,7 +67,8 @@ enum class PlaybackError { STREAM_UNAVAILABLE, NETWORK }
 @OptIn(UnstableApi::class)
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(
-    playerFactory: PlayerFactory,
+    private val playerFactory: PlayerFactory,
+    private val observeSettings: ObservePlayerSettingsUseCase,
     private val observeActivePortal: ObserveActivePortalUseCase,
     private val observeChannels: ObserveChannelsUseCase,
     private val observeNowNext: ObserveNowNextUseCase,
@@ -77,7 +80,28 @@ class PlaybackViewModel @Inject constructor(
     observeProtection: ObserveNetworkProtectionUseCase,
 ) : ViewModel() {
 
-    val player: ExoPlayer = playerFactory.create()
+    private val listener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            _state.update { it.copy(isBuffering = playbackState == Player.STATE_BUFFERING) }
+            if (playbackState == Player.STATE_READY) {
+                retriedCurrent = false
+                _state.update { it.copy(error = null) }
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) = handleError(error)
+    }
+
+    /** Réglages avec lesquels le lecteur actuel a été construit. */
+    private var builtWith: PlayerSettings = observeSettings().value
+
+    /**
+     * Le lecteur peut être RECRÉÉ quand les réglages tampon/décodage changent : les écrans
+     * observent donc ce flux (et non une référence figée) pour afficher la bonne surface vidéo.
+     */
+    private val _player = MutableStateFlow(playerFactory.create(builtWith).also { it.addListener(listener) })
+    val playerFlow: StateFlow<ExoPlayer> = _player.asStateFlow()
+    val player: ExoPlayer get() = _player.value
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
@@ -88,20 +112,23 @@ class PlaybackViewModel @Inject constructor(
     private var retriedCurrent = false
 
     init {
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                _state.update { it.copy(isBuffering = playbackState == Player.STATE_BUFFERING) }
-                if (playbackState == Player.STATE_READY) {
-                    retriedCurrent = false
-                    _state.update { it.copy(error = null) }
+        // Multi-portails : changer de portail actif remet le lecteur à zéro (autres chaînes).
+        viewModelScope.launch {
+            observeActivePortal().map { it?.id }.distinctUntilChanged().collect { id ->
+                val previous = _state.value.portalId
+                if (previous != null && previous != id) {
+                    loadJob?.cancel(); listJob?.cancel(); epgJob?.cancel()
+                    listJob = null
+                    player.stop()
+                    player.clearMediaItems()
+                    _state.value = PlaybackUiState(portalId = id)
+                } else {
+                    _state.update { it.copy(portalId = id) }
                 }
             }
-
-            override fun onPlayerError(error: PlaybackException) = handleError(error)
-        })
+        }
         viewModelScope.launch {
-            val portal = observeActivePortal().filterNotNull().first()
-            _state.update { it.copy(portalId = portal.id) }
+            observeSettings().collect { settings -> applySettings(settings) }
         }
         // Kill switch : le VPN tombe -> on coupe le flux immédiatement (en plus du blocage réseau).
         // Au retour du VPN, l'appli repart de l'accueil : la reprise du direct se fait en revenant
@@ -116,10 +143,41 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
-    /** Dernière chaîne regardée (pour la relancer au démarrage), ou null. */
+    /** Dernière chaîne regardée (pour la relancer au démarrage), ou null si désactivé dans les réglages. */
     suspend fun lastWatched(): Pair<Channel, String>? {
+        if (!observeSettings().value.resumeLastChannel) return null
         val portalId = awaitPortal()
         return lastChannel.get(portalId)
+    }
+
+    /**
+     * Application à chaud des réglages :
+     * - tampon / décodage -> nouveau lecteur (ces paramètres ne se changent qu'à la construction),
+     *   puis reprise de la chaîne en cours ;
+     * - format TS/HLS -> la chaîne en cours est relancée avec la nouvelle URL.
+     */
+    private fun applySettings(settings: PlayerSettings) {
+        val old = builtWith
+        builtWith = settings
+        val channel = _state.value.channel
+        when {
+            settings.buffer != old.buffer || settings.decoder != old.decoder -> {
+                val wasActive = player.playbackState != Player.STATE_IDLE
+                loadJob?.cancel()
+                player.removeListener(listener)
+                player.release()
+                _player.value = playerFactory.create(settings).also { it.addListener(listener) }
+                if (channel != null && wasActive) switchTo(channel, debounceMs = 0)
+            }
+            settings.liveFormat != old.liveFormat && channel != null ->
+                if (player.playbackState != Player.STATE_IDLE) {
+                    switchTo(channel, debounceMs = 0)
+                } else {
+                    // Lecture coupée (réglage changé hors de l'écran Live) : on oublie l'ancienne URL,
+                    // onAppStarted() relancera la chaîne dans le nouveau format au retour.
+                    player.clearMediaItems()
+                }
+        }
     }
 
     /** Lance [channel] et fixe la liste de zapping sur [categoryId]. */
@@ -193,7 +251,13 @@ class PlaybackViewModel @Inject constructor(
 
     /** Retour au premier plan : on reprend le direct (et non la position mise en pause). */
     fun onAppStarted() {
-        if (_state.value.channel != null && player.playbackState == Player.STATE_IDLE) {
+        val channel = _state.value.channel ?: return
+        if (player.playbackState != Player.STATE_IDLE) return
+        if (player.mediaItemCount == 0) {
+            // Lecteur recréé entre-temps (réglage tampon/décodage changé hors de l'écran Live) :
+            // il n'a pas encore de flux, on relance la chaîne en cours.
+            switchTo(channel, debounceMs = 0)
+        } else {
             player.seekToDefaultPosition()
             player.prepare()
         }

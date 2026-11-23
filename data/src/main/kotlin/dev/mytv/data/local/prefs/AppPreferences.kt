@@ -25,6 +25,28 @@ class AppPreferences @Inject constructor(
         dataStore.edit { it[KEY_ACTIVE_PORTAL] = id }
     }
 
+    suspend fun clearActivePortalId() {
+        dataStore.edit { it.remove(KEY_ACTIVE_PORTAL) }
+    }
+
+    /** Oublie tout ce qui concerne un portail supprimé (horodatages, guide, dernière chaîne). */
+    suspend fun clearPortal(portalId: Long) {
+        dataStore.edit { prefs ->
+            listOf(catalogSyncKey(portalId), epgSyncKey(portalId), vodSyncKey(portalId), epgGenerationKey(portalId))
+                .forEach { prefs.remove(it) }
+            prefs.remove(lastChannelKey(portalId))
+        }
+    }
+
+    // --- Réglages du lecteur (stockés en texte : noms des énumérations du domain)
+    val playerSettingsRaw: Flow<Map<String, String>> = dataStore.data.map { prefs ->
+        PLAYER_KEYS.mapNotNull { key -> prefs[key]?.let { key.name to it } }.toMap()
+    }
+
+    suspend fun setPlayerSettingsRaw(values: Map<String, String>) {
+        dataStore.edit { prefs -> values.forEach { (k, v) -> prefs[stringPreferencesKey(k)] = v } }
+    }
+
     // --- Horodatages de synchronisation
     suspend fun lastCatalogSync(portalId: Long): Long? = dataStore.data.first()[catalogSyncKey(portalId)]
     suspend fun setLastCatalogSync(portalId: Long, ms: Long) { dataStore.edit { it[catalogSyncKey(portalId)] = ms } }
@@ -56,12 +78,18 @@ class AppPreferences @Inject constructor(
         dataStore.edit { it[lastChannelKey(portalId)] = "$streamId|$categoryId" }
     }
 
-    private companion object {
+    internal companion object {
         val KEY_ACTIVE_PORTAL = longPreferencesKey("active_portal_id")
         fun catalogSyncKey(id: Long) = longPreferencesKey("catalog_sync_$id")
         fun epgSyncKey(id: Long) = longPreferencesKey("epg_sync_$id")
         fun vodSyncKey(id: Long) = longPreferencesKey("vod_sync_$id")
         fun epgGenerationKey(id: Long) = longPreferencesKey("epg_generation_$id")
         fun lastChannelKey(id: Long) = stringPreferencesKey("last_channel_$id")
+
+        const val PLAYER_LIVE_FORMAT = "player_live_format"
+        const val PLAYER_BUFFER = "player_buffer"
+        const val PLAYER_DECODER = "player_decoder"
+        const val PLAYER_RESUME_LAST = "player_resume_last"
+        val PLAYER_KEYS = listOf(PLAYER_LIVE_FORMAT, PLAYER_BUFFER, PLAYER_DECODER, PLAYER_RESUME_LAST).map { stringPreferencesKey(it) }
     }
 }

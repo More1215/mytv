@@ -72,7 +72,7 @@ fun HomeScreen(
                 PrivacyBadge(privacy.vpnActive, privacy.vpnRequired, privacy.portalEncrypted)
             }
             // En haut à droite : toujours visible, quelle que soit la longueur de l'écran.
-            OutlinedButton(onClick = onChangePortal) { Text("Portail") }
+            OutlinedButton(onClick = onChangePortal) { Text("Réglages") }
             Spacer(Modifier.width(24.dp))
             Clock(style = MaterialTheme.typography.displaySmall)
         }

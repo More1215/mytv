@@ -12,7 +12,7 @@ Lecteur IPTV natif (portails **Xtream Codes**) pensé pour la télécommande, ci
 | 0 | Projet, architecture, écran « Ajouter un portail », stockage chiffré | ✅ |
 | 1 | Live TV : catégories, chaînes, lecteur, zapping, EPG, favoris, cache | ✅ (à valider sur Fire TV) |
 | 2 | VOD : films, séries, reprise de lecture, recherche | ✅ (à valider sur Fire TV) |
-| 3 | Multi-portails, réglages lecteur, sauvegarde/restauration | à venir |
+| 3 | Multi-portails, réglages lecteur, sauvegarde/restauration | ✅ (à valider sur Fire TV) |
 
 ## Stack
 
@@ -78,6 +78,38 @@ En fin d'épisode, l'épisode suivant démarre après 10 s, sauf si tu choisis �
 **Recherche** : OK pour ouvrir le clavier, puis tape au moins 2 lettres. La recherche porte sur
 les films et les séries en cache (aucune requête réseau), sans tenir compte des accents ni des
 majuscules : « ete » trouve « Un Été… ».
+
+**Réglages** (bouton « Réglages » de l'accueil ou de la Live TV)
+- **Portails** : ajouter un portail, choisir le portail actif (OK), en supprimer un (une
+  confirmation est demandée, le focus est sur « Annuler »). Chaque portail garde son cache,
+  ses favoris et ses reprises.
+- **Lecteur** : OK fait défiler les choix, appliqués tout de suite, même pendant la lecture.
+  - Format des chaînes : MPEG-TS (zapping le plus rapide) ou HLS (plus tolérant aux coupures).
+  - Mémoire tampon : Démarrage rapide (~1 s), Équilibré, ou Stabilité (~5 s, connexions lentes).
+  - Décodage vidéo : Matériel (recommandé) ou Logiciel (si une chaîne affiche une image cassée).
+  - Relancer la dernière chaîne au démarrage : Oui / Non.
+- **Sauvegarde et restauration** : voir plus bas.
+
+### Sauvegarde et restauration
+
+Sert à changer de Fire TV ou à réinstaller l'appli sans tout ressaisir.
+
+1. Ouvre **Réglages → Sauvegarde et restauration** (ou, sur une installation neuve,
+   « Restaurer une sauvegarde » sur l'écran d'ajout de portail).
+2. La TV affiche une adresse du type `http://192.168.1.20:8765/?pin=123456`. Ouvre-la dans le
+   navigateur d'un PC ou d'un téléphone **connecté au même Wi-Fi**.
+3. **Télécharger** : choisis une phrase secrète (8 caractères minimum). Tu obtiens un fichier
+   `.mytv` contenant les portails, favoris et reprises.
+   **Restaurer** : envoie ce fichier avec sa phrase secrète. Les portails déjà présents ne sont
+   pas dupliqués.
+4. Reviens à l'accueil avec « Terminé ».
+
+Sécurité :
+- Le fichier est chiffré (PBKDF2 210 000 itérations + AES-256-GCM). Sans la phrase secrète, il
+  est illisible. **Une phrase oubliée = sauvegarde perdue.**
+- Le partage n'existe que pendant que l'écran est ouvert, uniquement sur le réseau local, et
+  demande le code à 6 chiffres (5 essais faux maximum, puis il se ferme).
+- Rien ne passe par Internet ni par un service tiers.
 
 ### Règles de reprise de lecture
 - La position est enregistrée toutes les 15 s, à la pause, en quittant le lecteur et quand le

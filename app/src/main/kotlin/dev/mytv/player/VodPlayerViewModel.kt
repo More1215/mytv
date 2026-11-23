@@ -62,6 +62,7 @@ data class VodPlayerState(
 class VodPlayerViewModel @Inject constructor(
     savedState: SavedStateHandle,
     playerFactory: PlayerFactory,
+    observeSettings: dev.mytv.domain.usecase.ObservePlayerSettingsUseCase,
     private val observeActivePortal: ObserveActivePortalUseCase,
     private val getStreamUrl: GetVodStreamUrlUseCase,
     private val observeResume: ObserveResumeUseCase,
@@ -69,7 +70,8 @@ class VodPlayerViewModel @Inject constructor(
     private val getSeriesDetails: GetSeriesDetailsUseCase,
 ) : ViewModel() {
 
-    val player: ExoPlayer = playerFactory.create()
+    /** Réglages lus à l'ouverture du lecteur : un changement s'applique au film suivant. */
+    val player: ExoPlayer = playerFactory.create(observeSettings().value)
 
     private val _state = MutableStateFlow(VodPlayerState(item = savedState.toVodItem()))
     val state: StateFlow<VodPlayerState> = _state.asStateFlow()

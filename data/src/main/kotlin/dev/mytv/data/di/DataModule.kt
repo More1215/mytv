@@ -17,6 +17,13 @@ import dev.mytv.data.local.db.LiveDao
 import dev.mytv.data.local.db.MyTvDatabase
 import dev.mytv.data.local.db.PortalDao
 import dev.mytv.data.local.db.VodDao
+import dev.mytv.data.local.db.BackupDao
+import dev.mytv.data.repository.BackupRepositoryImpl
+import dev.mytv.data.repository.SettingsRepositoryImpl
+import dev.mytv.domain.repository.BackupRepository
+import dev.mytv.domain.repository.SettingsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import dev.mytv.data.repository.VodRepositoryImpl
 import dev.mytv.domain.repository.VodRepository
 import dev.mytv.data.network.EncryptedDns
@@ -125,11 +132,18 @@ object DataProvidesModule {
     @Provides
     fun provideVodDao(db: MyTvDatabase): VodDao = db.vodDao()
 
+    @Provides
+    fun provideBackupDao(db: MyTvDatabase): BackupDao = db.backupDao()
+
     @Provides @Singleton
     fun provideDataStore(@ApplicationContext context: Context): DataStore<Preferences> = context.appDataStore
 
     @Provides @Named(PortalRepositoryImpl.IO_DISPATCHER)
     fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+
+    /** Portée de l'application : vit aussi longtemps que le processus (réglages en mémoire). */
+    @Provides @Singleton @Named(SettingsRepositoryImpl.APP_SCOPE)
+    fun provideAppScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private const val USER_AGENT = "MyTV/1.0 (Linux; Android TV)"
 }
@@ -148,6 +162,12 @@ abstract class DataBindsModule {
 
     @Binds
     abstract fun bindVodRepository(impl: VodRepositoryImpl): VodRepository
+
+    @Binds
+    abstract fun bindSettingsRepository(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds
+    abstract fun bindBackupRepository(impl: BackupRepositoryImpl): BackupRepository
 }
 
 /** Qualifie le client OkHttp sans timeout global, réservé au téléchargement du guide XMLTV. */

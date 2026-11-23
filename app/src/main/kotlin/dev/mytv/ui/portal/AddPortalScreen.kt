@@ -43,6 +43,8 @@ import dev.mytv.ui.theme.MyTvColors
 @Composable
 fun AddPortalScreen(
     onPortalSaved: () -> Unit,
+    /** Installation neuve : restaurer une sauvegarde au lieu de tout ressaisir. */
+    onRestore: () -> Unit,
     viewModel: AddPortalViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -59,6 +61,7 @@ fun AddPortalScreen(
         onPasswordChange = viewModel::onPasswordChange,
         onTest = viewModel::test,
         onSave = viewModel::save,
+        onRestore = onRestore,
     )
 }
 
@@ -71,6 +74,7 @@ private fun AddPortalContent(
     onPasswordChange: (String) -> Unit,
     onTest: () -> Unit,
     onSave: () -> Unit,
+    onRestore: () -> Unit,
 ) {
     val urlFocus = remember { FocusRequester() }
     val userFocus = remember { FocusRequester() }
@@ -93,7 +97,7 @@ private fun AddPortalContent(
             .padding(horizontal = 48.dp, vertical = 27.dp),
         horizontalArrangement = Arrangement.spacedBy(40.dp),
     ) {
-        // --- Colonne gauche : titre et état (non focusable)
+        // --- Colonne gauche : titre, état, et accès à la restauration d'une sauvegarde
         Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = Arrangement.Center) {
             Text(stringResource(R.string.add_portal_title), style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.height(12.dp))
@@ -102,7 +106,9 @@ private fun AddPortalContent(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MyTvColors.OnSurfaceMuted,
             )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(20.dp))
+            OutlinedButton(onClick = onRestore) { Text(stringResource(R.string.action_restore_backup)) }
+            Spacer(Modifier.height(20.dp))
             StatusPanel(state.phase)
         }
 

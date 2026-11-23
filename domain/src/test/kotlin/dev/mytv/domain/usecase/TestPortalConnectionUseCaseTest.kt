@@ -27,6 +27,9 @@ class TestPortalConnectionUseCaseTest {
     private class FakeRepo(val answers: Map<String, AppResult<AccountInfo>>) : PortalRepository {
         val tested = mutableListOf<String>()
         override fun observeActivePortal(): Flow<Portal?> = emptyFlow()
+        override fun observePortals(): Flow<List<Portal>> = emptyFlow()
+        override suspend fun setActivePortal(portalId: Long) = Unit
+        override suspend fun deletePortal(portalId: Long) = Unit
         override suspend fun testConnection(credentials: PortalCredentials): AppResult<AccountInfo> {
             tested += credentials.serverUrl
             return answers[credentials.serverUrl] ?: AppResult.Failure(AppError.Unreachable)

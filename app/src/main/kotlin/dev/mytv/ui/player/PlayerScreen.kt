@@ -43,6 +43,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -116,6 +117,16 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
         Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // Retour intercepté avant les enfants : sinon, quand un bouton du panneau d'erreur a le
+            // focus, Compose consomme le premier Retour pour « sortir » le focus du panneau et
+            // l'utilisateur reste bloqué sur l'erreur.
+            .onPreviewKeyEvent { event ->
+                if (event.key != Key.Back) return@onPreviewKeyEvent false
+                if (event.type == KeyEventType.KeyUp) {
+                    if (browserOpen) browserOpen = false else onBack()
+                }
+                true
+            }
             .focusRequester(rootFocus)
             .focusable()
             .onKeyEvent { event ->
@@ -130,7 +141,8 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
                 }
             },
     ) {
-        VideoSurface(playback.player, Modifier.fillMaxSize())
+        val player by playback.playerFlow.collectAsStateWithLifecycle()
+        VideoSurface(player, Modifier.fillMaxSize())
 
         if (state.isBuffering && state.error == null) {
             Text(

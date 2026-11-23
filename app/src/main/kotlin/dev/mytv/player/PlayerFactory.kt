@@ -9,50 +9,52 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.mytv.domain.model.DecoderMode
+import dev.mytv.domain.model.PlayerSettings
 import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 /**
- * Construit l'ExoPlayer réglé pour le zapping rapide sur Fire TV Stick (2 Go de RAM).
+ * Construit un ExoPlayer selon les réglages (tampon, décodage), pensé pour le Fire TV Stick (2 Go).
  *
  * Choix non évidents :
- * - **Buffer de démarrage court** (1 s) : l'image apparaît vite après un zap ; le buffer max
- *   reste modeste (30 s) pour ne pas gaspiller la RAM du Stick.
+ * - **Tampon de démarrage court** par défaut (1 s) : l'image apparaît vite après un zap ;
+ *   les profils « Équilibré » / « Stabilité » privilégient l'absence de coupures.
  * - **Extracteur TS permissif** : beaucoup de flux IPTV commencent sans image-clé IDR ; sans
  *   FLAG_ALLOW_NON_IDR_KEYFRAMES, l'image peut rester noire plusieurs secondes.
- * - **Repli de décodeur** activé : si le décodeur matériel refuse un flux, on tente le suivant.
- * - Le réseau passe par le même OkHttpClient que l'API (User-Agent, pool de connexions).
+ * - **Décodage « logiciel »** : on garde tous les décodeurs mais on place les décodeurs logiciels
+ *   d'Android en premier. Utile quand le décodeur matériel affiche mal un flux exotique.
+ * - **Repli de décodeur** activé : si un décodeur refuse un flux, on tente le suivant.
+ * - Le réseau passe par le même OkHttpClient que l'API (User-Agent, DNS chiffré, kill switch).
  */
 class PlayerFactory @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient,
 ) {
     @OptIn(UnstableApi::class)
-    fun create(): ExoPlayer {
+    fun create(settings: PlayerSettings): ExoPlayer {
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(
                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
                     DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
             )
-        val dataSource = OkHttpDataSource.Factory(okHttpClient)
-        val mediaSources = DefaultMediaSourceFactory(dataSource, extractors)
+        val mediaSources = DefaultMediaSourceFactory(OkHttpDataSource.Factory(okHttpClient), extractors)
 
+        val b = settings.buffer
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs = */ 15_000,
-                /* maxBufferMs = */ 30_000,
-                /* bufferForPlaybackMs = */ 1_000,
-                /* bufferForPlaybackAfterRebufferMs = */ 3_000,
-            )
+            .setBufferDurationsMs(b.minMs, b.maxMs, b.startMs, b.afterRebufferMs)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         val renderers = DefaultRenderersFactory(context)
             .setEnableDecoderFallback(true)
+            .apply { if (settings.decoder == DecoderMode.SOFTWARE) setMediaCodecSelector(softwareFirst) }
 
         return ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(mediaSources)
@@ -66,5 +68,12 @@ class PlayerFactory @Inject constructor(
             )
             .build()
             .apply { playWhenReady = true }
+    }
+
+    /** Mêmes décodeurs que par défaut, mais les décodeurs logiciels passent devant. */
+    @OptIn(UnstableApi::class)
+    private val softwareFirst = MediaCodecSelector { mimeType, requiresSecure, requiresTunneling ->
+        MediaCodecUtil.getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
+            .sortedBy { !it.softwareOnly }
     }
 }

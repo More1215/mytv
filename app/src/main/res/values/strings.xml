@@ -14,6 +14,7 @@
     <string name="field_empty">Non renseigné</string>
     <string name="action_test">Tester la connexion</string>
     <string name="action_save">Enregistrer et continuer</string>
+    <string name="action_restore_backup">Restaurer une sauvegarde</string>
     <string name="status_testing">Connexion au portail…</string>
     <string name="status_saving">Enregistrement…</string>
     <string name="status_success">Connexion réussie</string>
@@ -33,6 +34,7 @@
     <string name="error_account_unavailable">Compte inutilisable (%1$s). Contacte ton fournisseur.</string>
     <string name="error_unreachable">Portail injoignable. Vérifie l\'URL et la connexion internet.</string>
     <string name="error_vpn_required">Connexion bloquée : aucun VPN actif.</string>
+    <string name="error_backup_unreadable">Sauvegarde illisible : phrase secrète incorrecte ou fichier qui n\'est pas une sauvegarde MyTV.</string>
 
     <!-- Kill switch VPN -->
     <string name="vpn_required_title">VPN requis</string>

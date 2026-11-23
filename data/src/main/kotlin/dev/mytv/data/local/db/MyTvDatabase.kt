@@ -32,4 +32,5 @@ abstract class MyTvDatabase : RoomDatabase() {
     abstract fun liveDao(): LiveDao
     abstract fun epgDao(): EpgDao
     abstract fun vodDao(): VodDao
+    abstract fun backupDao(): BackupDao
 }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -41,6 +42,25 @@ class PortalRepositoryImpl @Inject constructor(
             .distinctUntilChanged()
             .flatMapLatest { id -> if (id == null) flowOf(null) else portalDao.observeById(id) }
             .map { it?.toDomain() }
+
+    override fun observePortals(): Flow<List<Portal>> =
+        portalDao.observeAll().map { list -> list.map { it.toDomain() } }
+
+    override suspend fun setActivePortal(portalId: Long) = withContext(io) {
+        preferences.setActivePortalId(portalId)
+    }
+
+    override suspend fun deletePortal(portalId: Long) = withContext(io) {
+        val wasActive = preferences.activePortalId.first() == portalId
+        portalDao.deleteEverything(portalId)
+        preferences.clearPortal(portalId)
+        sources.invalidate(portalId)
+        if (wasActive) {
+            // Un autre portail prend le relais ; sans portail, l'appli revient à « Ajouter un portail ».
+            val next = portalDao.getAll().firstOrNull()
+            if (next != null) preferences.setActivePortalId(next.id) else preferences.clearActivePortalId()
+        }
+    }
 
     override suspend fun testConnection(credentials: PortalCredentials): AppResult<AccountInfo> =
         withContext(io) {

@@ -11,6 +11,17 @@ interface PortalRepository {
     /** Portail actif, ou null si aucun n'a encore été configuré. */
     fun observeActivePortal(): Flow<Portal?>
 
+    /** Tous les portails enregistrés, du plus ancien au plus récent. */
+    fun observePortals(): Flow<List<Portal>>
+
+    suspend fun setActivePortal(portalId: Long)
+
+    /**
+     * Supprime un portail et TOUT ce qui lui est lié (chaînes, guide, films, favoris, reprises).
+     * Si c'était le portail actif, un autre devient actif (ou aucun s'il n'en reste pas).
+     */
+    suspend fun deletePortal(portalId: Long)
+
     /** Interroge le portail sans rien enregistrer. */
     suspend fun testConnection(credentials: PortalCredentials): AppResult<AccountInfo>
 
