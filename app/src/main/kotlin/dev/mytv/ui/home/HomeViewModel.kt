@@ -3,7 +3,9 @@ package dev.mytv.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.mytv.domain.model.Channel
 import dev.mytv.domain.model.ResumePoint
+import dev.mytv.domain.usecase.ChannelStatsUseCase
 import dev.mytv.domain.usecase.ObserveActivePortalUseCase
 import dev.mytv.domain.usecase.ObserveNetworkProtectionUseCase
 import dev.mytv.domain.usecase.ObserveResumeUseCase
@@ -31,6 +33,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     observeActivePortal: ObserveActivePortalUseCase,
     observeResume: ObserveResumeUseCase,
+    channelStats: ChannelStatsUseCase,
     observeProtection: ObserveNetworkProtectionUseCase,
     private val syncLive: SyncLiveUseCase,
     private val syncVod: SyncVodUseCase,
@@ -40,6 +43,11 @@ class HomeViewModel @Inject constructor(
 
     val continueWatching: StateFlow<List<ResumePoint>> = portal.filterNotNull()
         .flatMapLatest { observeResume.continueWatching(it.id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Les 2 chaînes les plus regardées (requête limitée à 2 lignes : rien de plus en mémoire). */
+    val topChannels: StateFlow<List<Channel>> = portal.filterNotNull()
+        .flatMapLatest { channelStats.mostWatched(it.id, limit = 2) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val privacy: StateFlow<PrivacyState> = combine(observeProtection(), portal) { p, portal ->

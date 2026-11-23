@@ -4,14 +4,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import dev.mytv.domain.model.Category
-import dev.mytv.domain.model.ContentKey
+import dev.mytv.domain.model.PosterEntry
 import dev.mytv.domain.model.SyncState
 import dev.mytv.domain.result.AppResult
 import dev.mytv.domain.usecase.ObserveActivePortalUseCase
-import dev.mytv.domain.usecase.ObserveMoviesUseCase
-import dev.mytv.domain.usecase.ObserveResumeUseCase
-import dev.mytv.domain.usecase.ObserveSeriesUseCase
+import dev.mytv.domain.usecase.ObservePosterGridUseCase
 import dev.mytv.domain.usecase.ObserveVodCategoriesUseCase
 import dev.mytv.domain.usecase.SyncVodUseCase
 import dev.mytv.domain.usecase.VodKind
@@ -28,22 +28,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-/** Élément de grille commun aux films et aux séries. */
-data class PosterItem(
-    val id: Long,
-    val title: String,
-    val imageUrl: String?,
-    /** Avancement de lecture (films uniquement), null si jamais commencé. */
-    val progress: Float?,
-)
-
-data class PosterGrid(val categoryId: String, val items: List<PosterItem>?)
 
 /**
  * Navigation dans les films OU les séries (selon l'argument de route "kind") :
@@ -55,9 +43,7 @@ class VodBrowseViewModel @Inject constructor(
     savedState: SavedStateHandle,
     observeActivePortal: ObserveActivePortalUseCase,
     observeCategories: ObserveVodCategoriesUseCase,
-    private val observeMovies: ObserveMoviesUseCase,
-    private val observeSeries: ObserveSeriesUseCase,
-    private val observeResume: ObserveResumeUseCase,
+    private val posterGrid: ObservePosterGridUseCase,
     private val syncVod: SyncVodUseCase,
 ) : ViewModel() {
 
@@ -76,8 +62,16 @@ class VodBrowseViewModel @Inject constructor(
     val selectedCategoryId: StateFlow<String> = focusedCategory.debounce(250).distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, Category.ALL_ID)
 
-    val grid: StateFlow<PosterGrid?> = combine(portalId.filterNotNull(), selectedCategoryId) { id, cat -> id to cat }
-        .flatMapLatest { (id, cat) -> itemsFor(id, cat).map { PosterGrid(cat, it) } }
+    private val gridKey = combine(portalId.filterNotNull(), selectedCategoryId) { id, cat -> id to cat }
+
+    /** Grille paginée : la base ne lit que les affiches proches de l'écran. */
+    val pages: Flow<PagingData<PosterEntry>> = gridKey
+        .flatMapLatest { (id, cat) -> posterGrid.pages(id, kind, cat) }
+        .cachedIn(viewModelScope)
+
+    /** Nombre total dans la catégorie (null tant qu'inconnu). */
+    val count: StateFlow<Int?> = gridKey
+        .flatMapLatest { (id, cat) -> posterGrid.count(id, kind, cat) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _sync = MutableStateFlow<SyncState>(SyncState.Idle)
@@ -92,22 +86,6 @@ class VodBrowseViewModel @Inject constructor(
     }
 
     fun refresh() = viewModelScope.launch { sync(force = true) }
-
-    private fun itemsFor(portalId: Long, categoryId: String): Flow<List<PosterItem>> = when (kind) {
-        VodKind.MOVIES -> observeMovies(portalId, categoryId).flatMapLatest { movies ->
-            // Progression de lecture affichée sur les affiches des films déjà commencés.
-            val keys = movies.map { ContentKey.MovieKey(it.streamId).storageKey }
-            val resumes = if (keys.isEmpty()) flowOf(emptyMap()) else observeResume.many(portalId, keys)
-            resumes.map { points ->
-                movies.map { m ->
-                    PosterItem(m.streamId, m.name, m.posterUrl, points[ContentKey.MovieKey(m.streamId).storageKey]?.progress)
-                }
-            }
-        }
-        VodKind.SERIES -> observeSeries(portalId, categoryId).map { list ->
-            list.map { PosterItem(it.seriesId, it.name, it.coverUrl, null) }
-        }
-    }
 
     private suspend fun sync(force: Boolean) {
         if (_sync.value == SyncState.Running) return

@@ -48,4 +48,10 @@ interface LiveRepository {
     suspend fun getLastChannel(portalId: Long): LastChannel?
 
     suspend fun setLastChannel(portalId: Long, lastChannel: LastChannel)
+
+    /** Compte une chaîne réellement regardée (appelé après ~20 s de lecture). */
+    suspend fun recordChannelWatched(portalId: Long, streamId: Long)
+
+    /** Chaînes les plus regardées, pour l'accueil. */
+    fun observeMostWatched(portalId: Long, limit: Int): Flow<List<Channel>>
 }

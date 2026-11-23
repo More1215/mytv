@@ -16,6 +16,7 @@ import dev.mytv.domain.model.NowNext
 import dev.mytv.domain.result.AppResult
 import dev.mytv.domain.usecase.GetLiveStreamUrlUseCase
 import dev.mytv.domain.usecase.GetShortEpgUseCase
+import dev.mytv.domain.usecase.ChannelStatsUseCase
 import dev.mytv.domain.usecase.LastChannelUseCase
 import dev.mytv.domain.usecase.ObserveActivePortalUseCase
 import dev.mytv.domain.usecase.ObserveCategoriesUseCase
@@ -77,6 +78,7 @@ class PlaybackViewModel @Inject constructor(
     private val observeCategories: ObserveCategoriesUseCase,
     private val toggleFavorite: ToggleFavoriteUseCase,
     private val lastChannel: LastChannelUseCase,
+    private val channelStats: ChannelStatsUseCase,
     observeProtection: ObserveNetworkProtectionUseCase,
 ) : ViewModel() {
 
@@ -86,6 +88,7 @@ class PlaybackViewModel @Inject constructor(
             if (playbackState == Player.STATE_READY) {
                 retriedCurrent = false
                 _state.update { it.copy(error = null) }
+                countWatchIfStaying()
             }
         }
 
@@ -110,6 +113,10 @@ class PlaybackViewModel @Inject constructor(
     private var listJob: Job? = null
     private var epgJob: Job? = null
     private var retriedCurrent = false
+
+    /** Chaîne en attente d'être comptée comme « regardée » (après WATCH_THRESHOLD_MS). */
+    private var watchJob: Job? = null
+    private var countedStreamId: Long? = null
 
     init {
         // Multi-portails : changer de portail actif remet le lecteur à zéro (autres chaînes).
@@ -276,7 +283,26 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Une chaîne n'est comptée qu'après 20 s d'image : un zapping rapide ne fausse pas les
+     * « chaînes souvent regardées ». Une seule fois par passage sur la chaîne.
+     */
+    private fun countWatchIfStaying() {
+        val channel = _state.value.channel ?: return
+        if (countedStreamId == channel.streamId || watchJob?.isActive == true) return
+        watchJob = viewModelScope.launch {
+            delay(WATCH_THRESHOLD_MS)
+            if (_state.value.channel?.streamId != channel.streamId || !player.isPlaying) return@launch
+            countedStreamId = channel.streamId
+            channelStats.recordWatched(awaitPortal(), channel.streamId)
+        }
+    }
+
     private fun switchTo(channel: Channel, debounceMs: Long) {
+        if (channel.streamId != _state.value.channel?.streamId) {
+            watchJob?.cancel()
+            countedStreamId = null
+        }
         _state.update { it.copy(channel = channel, error = null, nowNext = NowNext.EMPTY) }
         observeEpgFor(channel)
         loadJob?.cancel()
@@ -367,5 +393,6 @@ class PlaybackViewModel @Inject constructor(
 
     private companion object {
         const val ZAP_DEBOUNCE_MS = 350L
+        const val WATCH_THRESHOLD_MS = 20_000L
     }
 }

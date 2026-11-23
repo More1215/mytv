@@ -54,8 +54,9 @@ referment le clavier. Le focus initial est toujours posé explicitement à l'ouv
 
 ## Utilisation à la télécommande
 
-**Accueil** : quatre tuiles (Live TV, Films, Séries, Recherche) et la rangée « Continuer à
-regarder ». Au lancement, l'appli relance la dernière chaîne : Retour ramène à la liste des
+**Accueil** : quatre tuiles (Live TV, Films, Séries, Recherche), puis « Accès rapide » : tes 2
+chaînes les plus regardées (comptées après 20 s de visionnage, le zapping ne compte pas) et les
+2 derniers films ou épisodes commencés. Les reprises suivantes sont dans « Continuer à regarder ». Au lancement, l'appli relance la dernière chaîne : Retour ramène à la liste des
 chaînes, puis à l'accueil.
 
 **Films / Séries** : catégories à gauche (la grille suit la catégorie survolée), affiches à droite.
@@ -162,6 +163,18 @@ Au démarrage, l'appli relance automatiquement la dernière chaîne regardée.
 - **Erreurs de flux** : une relance automatique, puis un message avec « Réessayer ».
 - Flux live demandés en **MPEG-TS** (`.ts`), le format qui démarre le plus vite. Il sera
   réglable à l'étape 3.
+
+## Machines faibles (box bas de gamme, 1 Go de RAM)
+
+L'appli est pensée pour tourner sur les appareils les plus modestes (testée sur 1 Go de RAM et
+1 seul cœur) :
+- **Grilles paginées** : seules les affiches proches de l'écran sont lues en base (un catalogue
+  de 15 000 films ne charge jamais 15 000 lignes d'un coup).
+- **Détection automatique** d'une machine faible : images en 16 bits et cache d'images réduit.
+- **Tampon vidéo plafonné en octets** (24 Mo sur machine faible, 64 Mo sinon) : un flux 4K ne
+  peut pas saturer la mémoire.
+- En HLS, la qualité ne dépasse pas la définition réelle de l'écran.
+- Listes du portail décodées au fil de l'eau, sans garder le texte JSON entier en mémoire.
 
 ## Confidentialité vis-à-vis du FAI
 

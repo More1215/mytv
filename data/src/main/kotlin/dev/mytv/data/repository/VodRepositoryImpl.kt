@@ -21,6 +21,11 @@ import dev.mytv.domain.model.SeriesDetails
 import dev.mytv.domain.model.VodItem
 import dev.mytv.domain.repository.VodRepository
 import dev.mytv.domain.result.AppResult
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
+import dev.mytv.domain.model.PosterEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -45,6 +50,19 @@ class VodRepositoryImpl @Inject constructor(
 
     private val syncMutex = Mutex()
 
+    /**
+     * Pages de 30 affiches (6 rangées), préchargées une page à l'avance. maxSize borne la mémoire :
+     * au-delà de 210 affiches chargées, les pages les plus éloignées sont libérées (les
+     * emplacements restent réservés : la grille ne « saute » pas).
+     */
+    private val gridPaging = PagingConfig(
+        pageSize = 30,
+        prefetchDistance = 30,
+        initialLoadSize = 60,
+        enablePlaceholders = true,
+        maxSize = 210,
+    )
+
     /** Fiches déjà ouvertes pendant la session : revenir sur une fiche est instantané. */
     private val movieDetailsCache = ConcurrentHashMap<Pair<Long, Long>, MovieDetails>()
     private val seriesDetailsCache = ConcurrentHashMap<Pair<Long, Long>, SeriesDetails>()
@@ -56,20 +74,35 @@ class VodRepositoryImpl @Inject constructor(
             listOf(Category(Category.ALL_ID, "Tous les films", Category.Kind.ALL)) + list.map { Category(it.categoryId, it.name) }
         }
 
-    override fun observeMovies(portalId: Long, categoryId: String): Flow<List<Movie>> =
-        (if (categoryId == Category.ALL_ID) vodDao.observeAllMovies(portalId) else vodDao.observeMovies(portalId, categoryId))
-            .map { list -> list.map { it.toDomain() } }
-            .flowOn(io)
+    override fun pagedMovies(portalId: Long, categoryId: String): Flow<PagingData<PosterEntry>> =
+        Pager(gridPaging) {
+            if (categoryId == Category.ALL_ID) vodDao.pagedAllMovies(portalId) else vodDao.pagedMovies(portalId, categoryId)
+        }.flow.map { page ->
+            page.map { r ->
+                val progress = if (r.positionMs != null && r.durationMs != null && r.durationMs > 0) {
+                    (r.positionMs.toFloat() / r.durationMs).coerceIn(0f, 1f)
+                } else {
+                    null
+                }
+                PosterEntry(r.id, r.title, r.imageUrl, progress)
+            }
+        }
+
+    override fun observeMovieCount(portalId: Long, categoryId: String): Flow<Int> =
+        if (categoryId == Category.ALL_ID) vodDao.observeAllMoviesCount(portalId) else vodDao.observeMoviesCount(portalId, categoryId)
 
     override fun observeSeriesCategories(portalId: Long): Flow<List<Category>> =
         vodDao.observeCategories(portalId, KIND_SERIES).map { list ->
             listOf(Category(Category.ALL_ID, "Toutes les séries", Category.Kind.ALL)) + list.map { Category(it.categoryId, it.name) }
         }
 
-    override fun observeSeries(portalId: Long, categoryId: String): Flow<List<Series>> =
-        (if (categoryId == Category.ALL_ID) vodDao.observeAllSeries(portalId) else vodDao.observeSeries(portalId, categoryId))
-            .map { list -> list.map { it.toDomain() } }
-            .flowOn(io)
+    override fun pagedSeries(portalId: Long, categoryId: String): Flow<PagingData<PosterEntry>> =
+        Pager(gridPaging) {
+            if (categoryId == Category.ALL_ID) vodDao.pagedAllSeries(portalId) else vodDao.pagedSeries(portalId, categoryId)
+        }.flow.map { page -> page.map { PosterEntry(it.id, it.title, it.imageUrl, null) } }
+
+    override fun observeSeriesCount(portalId: Long, categoryId: String): Flow<Int> =
+        if (categoryId == Category.ALL_ID) vodDao.observeAllSeriesCount(portalId) else vodDao.observeSeriesCount(portalId, categoryId)
 
     override suspend fun isCatalogStale(portalId: Long, maxAgeMs: Long): Boolean = withContext(io) {
         val last = preferences.lastVodSync(portalId)

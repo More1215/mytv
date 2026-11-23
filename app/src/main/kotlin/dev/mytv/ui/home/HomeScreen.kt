@@ -34,7 +34,18 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.size.Size
+import dev.mytv.domain.model.Channel
 import dev.mytv.domain.model.ResumePoint
+import dev.mytv.ui.components.ChannelLogo
+import dev.mytv.ui.components.ProgramProgress
+import dev.mytv.ui.components.SingleLineText
 import dev.mytv.ui.common.tryRequestFocus
 import dev.mytv.ui.components.Clock
 import dev.mytv.ui.components.PosterCard
@@ -52,10 +63,15 @@ enum class HomeSection { LIVE, MOVIES, SERIES, SEARCH }
 fun HomeScreen(
     onSection: (HomeSection) -> Unit,
     onResume: (ResumePoint) -> Unit,
+    onPlayChannel: (Channel) -> Unit,
     onChangePortal: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val continueWatching by viewModel.continueWatching.collectAsStateWithLifecycle()
+    val topChannels by viewModel.topChannels.collectAsStateWithLifecycle()
+    // « Accès rapide » : 2 chaînes + 2 reprises ; la rangée du dessous montre les reprises suivantes.
+    val quickResumes = continueWatching.take(2)
+    val moreResumes = continueWatching.drop(2)
     val privacy by viewModel.privacy.collectAsStateWithLifecycle()
     val liveFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { liveFocus.tryRequestFocus() }
@@ -89,7 +105,21 @@ fun HomeScreen(
         }
 
         Spacer(Modifier.height(22.dp))
-        if (continueWatching.isNotEmpty()) {
+        if (topChannels.isNotEmpty() || quickResumes.isNotEmpty()) {
+            Text("Accès rapide", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            // Rangée fixe de 4 cases au plus : pas de liste paresseuse, rien à charger en plus.
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.focusRestorer()) {
+                topChannels.forEach { channel ->
+                    QuickChannelTile(channel, onClick = { onPlayChannel(channel) })
+                }
+                quickResumes.forEach { point ->
+                    QuickResumeTile(point, onClick = { onResume(point) })
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+        }
+        if (moreResumes.isNotEmpty()) {
             Text("Continuer à regarder", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             LazyRow(
@@ -97,7 +127,7 @@ fun HomeScreen(
                 contentPadding = PaddingValues(vertical = 8.dp, horizontal = 4.dp),
                 modifier = Modifier.focusRestorer(),
             ) {
-                items(continueWatching, key = { it.key }) { point ->
+                items(moreResumes, key = { it.key }) { point ->
                     Column(Modifier.width(104.dp)) {
                         PosterCard(
                             title = point.title,
@@ -117,9 +147,9 @@ fun HomeScreen(
                     }
                 }
             }
-        } else {
+        } else if (topChannels.isEmpty() && quickResumes.isEmpty()) {
             Text(
-                "Les films et épisodes commencés apparaîtront ici.",
+                "Tes chaînes préférées et les films ou épisodes commencés apparaîtront ici.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MyTvColors.OnSurfaceMuted,
             )
@@ -151,5 +181,63 @@ private fun SectionTile(icon: String, label: String, onClick: () -> Unit, modifi
             Spacer(Modifier.height(6.dp))
             Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
+    }
+}
+
+/** Case large d'une chaîne souvent regardée : OK la lance directement en plein écran. */
+@Composable
+private fun QuickChannelTile(channel: Channel, onClick: () -> Unit) {
+    QuickTile(onClick) {
+        ChannelLogo(channel.logoUrl, channel.name, size = 56.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            SingleLineText(channel.name, style = MaterialTheme.typography.titleSmall)
+            Text("▶ Regarder", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/** Case large d'un film ou épisode à reprendre : vignette, titre et avancement. */
+@Composable
+private fun QuickResumeTile(point: ResumePoint, onClick: () -> Unit) {
+    val context = LocalContext.current
+    QuickTile(onClick) {
+        Box(Modifier.size(width = 50.dp, height = 75.dp).background(MyTvColors.Background, RoundedCornerShape(6.dp))) {
+            if (point.imageUrl != null) {
+                AsyncImage(
+                    // Vignette minuscule : décodée en 100x150 px, presque rien en mémoire.
+                    model = ImageRequest.Builder(context).data(point.imageUrl).size(Size(100, 150)).build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            SingleLineText(point.title, style = MaterialTheme.typography.titleSmall)
+            point.subtitle?.let { SingleLineText(it, style = MaterialTheme.typography.labelMedium) }
+            Spacer(Modifier.height(6.dp))
+            ProgramProgress(point.progress)
+        }
+    }
+}
+
+@Composable
+private fun QuickTile(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(width = 196.dp, height = 96.dp),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = MyTvColors.Surface,
+            contentColor = MyTvColors.OnBackground,
+            focusedContainerColor = MyTvColors.Accent,
+            focusedContentColor = androidx.compose.ui.graphics.Color.White,
+        ),
+        border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, MyTvColors.OnBackground))),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }

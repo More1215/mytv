@@ -1,5 +1,6 @@
 package dev.mytv.data.local.db
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -8,6 +9,18 @@ import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
+/** Case de grille de film + position de lecture éventuelle (jointure sur la clé "movie:<id>"). */
+private const val MOVIE_POSTER = """
+    SELECT m.streamId AS id, m.name AS title, m.posterUrl AS imageUrl,
+           r.positionMs AS positionMs, r.durationMs AS durationMs
+    FROM movies m
+    LEFT JOIN resume_points r ON r.portalId = m.portalId AND r.contentKey = 'movie:' || m.streamId
+"""
+
+data class MoviePosterRow(val id: Long, val title: String, val imageUrl: String?, val positionMs: Long?, val durationMs: Long?)
+
+data class SeriesPosterRow(val id: Long, val title: String, val imageUrl: String?)
+
 @Dao
 interface VodDao {
     // ------------------------------------------------------------------ Catalogue
@@ -15,17 +28,36 @@ interface VodDao {
     @Query("SELECT * FROM vod_categories WHERE portalId = :portalId AND kind = :kind ORDER BY sortOrder")
     fun observeCategories(portalId: Long, kind: String): Flow<List<VodCategoryEntity>>
 
-    @Query("SELECT * FROM movies WHERE portalId = :portalId ORDER BY sortOrder")
-    fun observeAllMovies(portalId: Long): Flow<List<MovieEntity>>
+    // Grilles paginées : seules 3 colonnes sont lues (pas de ligne complète), page par page, et la
+    // progression de lecture est jointe en SQL (aucune requête « IN (15 000 clés) », qui dépasse
+    // la limite de 999 paramètres de SQLite sur les Android anciens).
 
-    @Query("SELECT * FROM movies WHERE portalId = :portalId AND categoryId = :categoryId ORDER BY sortOrder")
-    fun observeMovies(portalId: Long, categoryId: String): Flow<List<MovieEntity>>
+    @Query("$MOVIE_POSTER WHERE m.portalId = :portalId ORDER BY m.sortOrder")
+    fun pagedAllMovies(portalId: Long): PagingSource<Int, MoviePosterRow>
 
-    @Query("SELECT * FROM series WHERE portalId = :portalId ORDER BY sortOrder")
-    fun observeAllSeries(portalId: Long): Flow<List<SeriesEntity>>
+    @Query("$MOVIE_POSTER WHERE m.portalId = :portalId AND m.categoryId = :categoryId ORDER BY m.sortOrder")
+    fun pagedMovies(portalId: Long, categoryId: String): PagingSource<Int, MoviePosterRow>
 
-    @Query("SELECT * FROM series WHERE portalId = :portalId AND categoryId = :categoryId ORDER BY sortOrder")
-    fun observeSeries(portalId: Long, categoryId: String): Flow<List<SeriesEntity>>
+    @Query("SELECT seriesId AS id, name AS title, coverUrl AS imageUrl FROM series WHERE portalId = :portalId ORDER BY sortOrder")
+    fun pagedAllSeries(portalId: Long): PagingSource<Int, SeriesPosterRow>
+
+    @Query(
+        "SELECT seriesId AS id, name AS title, coverUrl AS imageUrl FROM series " +
+            "WHERE portalId = :portalId AND categoryId = :categoryId ORDER BY sortOrder",
+    )
+    fun pagedSeries(portalId: Long, categoryId: String): PagingSource<Int, SeriesPosterRow>
+
+    @Query("SELECT COUNT(*) FROM movies WHERE portalId = :portalId")
+    fun observeAllMoviesCount(portalId: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM movies WHERE portalId = :portalId AND categoryId = :categoryId")
+    fun observeMoviesCount(portalId: Long, categoryId: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM series WHERE portalId = :portalId")
+    fun observeAllSeriesCount(portalId: Long): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM series WHERE portalId = :portalId AND categoryId = :categoryId")
+    fun observeSeriesCount(portalId: Long, categoryId: String): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM movies WHERE portalId = :portalId")
     suspend fun countMovies(portalId: Long): Int

@@ -113,6 +113,13 @@ class LiveRepositoryImpl @Inject constructor(
     override suspend fun liveStreamUrl(portalId: Long, streamId: Long): AppResult<String> =
         runCatchingApp { sources.get(portalId).liveStreamUrl(streamId) }
 
+    override suspend fun recordChannelWatched(portalId: Long, streamId: Long) = withContext(io) {
+        liveDao.recordWatch(portalId, streamId, System.currentTimeMillis())
+    }
+
+    override fun observeMostWatched(portalId: Long, limit: Int): Flow<List<Channel>> =
+        liveDao.observeMostWatched(portalId, limit).map { list -> list.map { it.toDomain() } }.flowOn(io)
+
     override suspend fun getLastChannel(portalId: Long): LastChannel? =
         preferences.lastChannel(portalId)?.let { (id, cat) -> LastChannel(id, cat) }
 

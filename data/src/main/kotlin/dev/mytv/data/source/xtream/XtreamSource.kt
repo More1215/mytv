@@ -111,7 +111,7 @@ class XtreamSource(
         api.vodCategories(user, pass).toSourceCategories()
 
     override suspend fun movies(): List<SourceMovie> =
-        decodeList<VodStreamDto>(api.vodStreams(user, pass)).mapNotNull(XtreamVodParser::movie)
+        decodeList<VodStreamDto, SourceMovie>(api.vodStreams(user, pass), XtreamVodParser::movie)
 
     override suspend fun movieDetails(streamId: Long): MovieDetails =
         XtreamVodParser.movieDetails(streamId, api.vodInfo(user, pass, streamId))
@@ -120,7 +120,7 @@ class XtreamSource(
         api.seriesCategories(user, pass).toSourceCategories()
 
     override suspend fun series(): List<SourceSeries> =
-        decodeList<SeriesDto>(api.series(user, pass)).mapNotNull(XtreamVodParser::series)
+        decodeList<SeriesDto, SourceSeries>(api.series(user, pass), XtreamVodParser::series)
 
     override suspend fun seriesDetails(seriesId: Long): SeriesDetails =
         XtreamVodParser.seriesDetails(seriesId, api.seriesInfo(user, pass, seriesId))
@@ -142,11 +142,14 @@ class XtreamSource(
             .build()
             .toString()
 
-    /** Décodage en flux d'un grand tableau JSON, sur un thread IO, sans charger le texte entier. */
+    /**
+     * Décodage en flux d'un grand tableau JSON, sur un thread IO : ni le texte entier ni la liste
+     * des objets bruts ne sont gardés en mémoire, chaque élément est converti dès qu'il est lu.
+     */
     @OptIn(ExperimentalSerializationApi::class)
-    private suspend inline fun <reified T> decodeList(body: okhttp3.ResponseBody): List<T> =
+    private suspend inline fun <reified T, R : Any> decodeList(body: okhttp3.ResponseBody, crossinline convert: (T) -> R?): List<R> =
         withContext(Dispatchers.IO) {
-            body.byteStream().use { json.decodeToSequence<T>(it, DecodeSequenceMode.ARRAY_WRAPPED).toList() }
+            body.byteStream().use { json.decodeToSequence<T>(it, DecodeSequenceMode.ARRAY_WRAPPED).mapNotNull { dto -> convert(dto) }.toList() }
         }
 
     private fun List<dev.mytv.data.remote.xtream.dto.LiveCategoryDto>.toSourceCategories() = mapNotNull { dto ->

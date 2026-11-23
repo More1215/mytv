@@ -29,6 +29,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.mytv.domain.model.Category
 import dev.mytv.domain.model.ResumePoint
 import dev.mytv.domain.model.VodItem
 import dev.mytv.domain.repository.NetworkProtection
@@ -204,6 +205,13 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                     )
                 },
                 onResume = { point -> navController.openResume(point) },
+                onPlayChannel = { channel ->
+                    // Même chemin que la relance au démarrage : Retour ramène à la liste, puis à l'accueil.
+                    // Zapping dans la catégorie de la chaîne (et non « Toutes », bien plus lourde).
+                    navController.navigate(Routes.LIVE)
+                    navController.navigate(Routes.PLAYER)
+                    playback.play(channel, channel.categoryId ?: Category.ALL_ID)
+                },
                 onChangePortal = { navController.navigate(Routes.SETTINGS) },
             )
         }

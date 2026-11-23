@@ -42,11 +42,12 @@ interface PortalDao {
     @Query("DELETE FROM movies WHERE portalId = :id") suspend fun deleteMovies(id: Long)
     @Query("DELETE FROM series WHERE portalId = :id") suspend fun deleteSeries(id: Long)
     @Query("DELETE FROM resume_points WHERE portalId = :id") suspend fun deleteResumePoints(id: Long)
+    @Query("DELETE FROM channel_stats WHERE portalId = :id") suspend fun deleteChannelStats(id: Long)
 
     @Transaction
     suspend fun deleteEverything(id: Long) {
         deleteLiveCategories(id); deleteLiveChannels(id); deleteFavorites(id); deleteEpg(id)
-        deleteVodCategories(id); deleteMovies(id); deleteSeries(id); deleteResumePoints(id)
+        deleteVodCategories(id); deleteMovies(id); deleteSeries(id); deleteResumePoints(id); deleteChannelStats(id)
         deletePortalRow(id)
     }
 }

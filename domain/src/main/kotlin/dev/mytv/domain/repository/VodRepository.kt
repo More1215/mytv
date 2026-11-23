@@ -4,12 +4,14 @@ import dev.mytv.domain.model.Category
 import dev.mytv.domain.model.ContentKey
 import dev.mytv.domain.model.Movie
 import dev.mytv.domain.model.MovieDetails
+import dev.mytv.domain.model.PosterEntry
 import dev.mytv.domain.model.ResumePoint
 import dev.mytv.domain.model.SearchResults
 import dev.mytv.domain.model.Series
 import dev.mytv.domain.model.SeriesDetails
 import dev.mytv.domain.model.VodItem
 import dev.mytv.domain.result.AppResult
+import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,11 +21,17 @@ import kotlinx.coroutines.flow.Flow
 interface VodRepository {
     /** Catégories de films, précédées de « Tous les films ». */
     fun observeMovieCategories(portalId: Long): Flow<List<Category>>
-    fun observeMovies(portalId: Long, categoryId: String): Flow<List<Movie>>
+    /**
+     * Grille de films paginée : seule la partie affichée (et un peu autour) est lue en base.
+     * Indispensable sur les petites machines : un portail peut compter 15 000+ films.
+     */
+    fun pagedMovies(portalId: Long, categoryId: String): Flow<PagingData<PosterEntry>>
+    fun observeMovieCount(portalId: Long, categoryId: String): Flow<Int>
 
     /** Catégories de séries, précédées de « Toutes les séries ». */
     fun observeSeriesCategories(portalId: Long): Flow<List<Category>>
-    fun observeSeries(portalId: Long, categoryId: String): Flow<List<Series>>
+    fun pagedSeries(portalId: Long, categoryId: String): Flow<PagingData<PosterEntry>>
+    fun observeSeriesCount(portalId: Long, categoryId: String): Flow<Int>
 
     suspend fun isCatalogStale(portalId: Long, maxAgeMs: Long): Boolean
 

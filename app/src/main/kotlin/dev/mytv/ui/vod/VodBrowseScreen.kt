@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
@@ -35,6 +34,9 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
@@ -60,7 +62,8 @@ fun VodBrowseScreen(
 ) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val selected by viewModel.selectedCategoryId.collectAsStateWithLifecycle()
-    val grid by viewModel.grid.collectAsStateWithLifecycle()
+    val posters = viewModel.pages.collectAsLazyPagingItems()
+    val count by viewModel.count.collectAsStateWithLifecycle()
     val sync by viewModel.sync.collectAsStateWithLifecycle()
 
     val gridState = rememberLazyGridState()
@@ -69,14 +72,21 @@ fun VodBrowseScreen(
     var gridHasFocus by remember { mutableStateOf(false) }
     var initialFocusDone by remember { mutableStateOf(false) }
 
-    val items = grid?.items
-    LaunchedEffect(items) {
-        if (initialFocusDone || items.isNullOrEmpty()) return@LaunchedEffect
-        withFrameNanos { }
-        initialFocusDone = firstItemFocus.tryRequestFocus()
+    val hasItems = posters.itemCount > 0
+    LaunchedEffect(hasItems) {
+        if (initialFocusDone || !hasItems) return@LaunchedEffect
+        // Grosse base sur machine lente : la grille peut mettre plusieurs images à apparaître.
+        repeat(60) {
+            withFrameNanos { }
+            if (firstItemFocus.tryRequestFocus()) {
+                initialFocusDone = true
+                return@LaunchedEffect
+            }
+        }
     }
     // Nouvelle catégorie : la grille repart du haut.
-    LaunchedEffect(grid?.categoryId) { if (initialFocusDone) gridState.scrollToItem(0) }
+    LaunchedEffect(selected) { if (initialFocusDone && hasItems) gridState.scrollToItem(0) }
+    val loading = posters.loadState.refresh is LoadState.Loading
 
     BackHandler(enabled = gridHasFocus) { selectedCategoryFocus.tryRequestFocus() }
 
@@ -123,9 +133,9 @@ fun VodBrowseScreen(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                items?.let {
+                count?.let { n ->
                     val noun = if (isMovies) "film" else "série"
-                    Text("${it.size} $noun${if (it.size > 1) "s" else ""}", style = MaterialTheme.typography.labelMedium, color = MyTvColors.OnSurfaceMuted)
+                    Text("$n $noun${if (n > 1) "s" else ""}", style = MaterialTheme.typography.labelMedium, color = MyTvColors.OnSurfaceMuted)
                 }
             }
             when (val s = sync) {
@@ -140,9 +150,9 @@ fun VodBrowseScreen(
             }
             Spacer(Modifier.height(8.dp))
             when {
-                items == null || (items.isEmpty() && sync == SyncState.Running) ->
+                !hasItems && (loading || sync == SyncState.Running) ->
                     Message(if (isMovies) "Chargement des films…" else "Chargement des séries…")
-                items.isEmpty() -> Message("Rien dans cette catégorie.")
+                !hasItems -> Message("Rien dans cette catégorie.")
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(5),
                     state = gridState,
@@ -155,14 +165,22 @@ fun VodBrowseScreen(
                     // Marge pour que l'agrandissement de l'affiche focusée ne soit pas rogné.
                     contentPadding = PaddingValues(8.dp),
                 ) {
-                    itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
-                        PosterCard(
-                            title = item.title,
-                            imageUrl = item.imageUrl,
-                            progress = item.progress,
-                            onClick = { onOpen(viewModel.kind, item.id) },
-                            modifier = if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier,
-                        )
+                    items(count = posters.itemCount, key = posters.itemKey { it.id }) { index ->
+                        val item = posters[index]
+                        val mod = if (index == 0) Modifier.focusRequester(firstItemFocus) else Modifier
+                        if (item == null) {
+                            // Emplacement pas encore lu (défilement rapide) : case vide mais
+                            // focalisable, pour que le D-pad continue de défiler sans blocage.
+                            PosterCard(title = "", imageUrl = null, onClick = {}, modifier = mod)
+                        } else {
+                            PosterCard(
+                                title = item.title,
+                                imageUrl = item.imageUrl,
+                                progress = item.progress,
+                                onClick = { onOpen(viewModel.kind, item.id) },
+                                modifier = mod,
+                            )
+                        }
                     }
                 }
             }

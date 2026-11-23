@@ -75,3 +75,9 @@ class LastChannelUseCase @Inject constructor(private val repo: LiveRepository) {
     suspend fun set(portalId: Long, channel: Channel, categoryId: String) =
         repo.setLastChannel(portalId, LastChannel(channel.streamId, categoryId))
 }
+
+/** Chaînes souvent regardées (« Accès rapide » de l'accueil). */
+class ChannelStatsUseCase @Inject constructor(private val repo: LiveRepository) {
+    suspend fun recordWatched(portalId: Long, streamId: Long) = repo.recordChannelWatched(portalId, streamId)
+    fun mostWatched(portalId: Long, limit: Int = 2): Flow<List<Channel>> = repo.observeMostWatched(portalId, limit)
+}

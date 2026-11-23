@@ -14,7 +14,9 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.mytv.DeviceProfile
 import dev.mytv.domain.model.DecoderMode
 import dev.mytv.domain.model.PlayerSettings
 import okhttp3.OkHttpClient
@@ -47,10 +49,19 @@ class PlayerFactory @Inject constructor(
         val mediaSources = DefaultMediaSourceFactory(OkHttpDataSource.Factory(okHttpClient), extractors)
 
         val b = settings.buffer
+        // Plafond en OCTETS : 80 s d'un flux 4K (~25 Mbit/s) pèseraient ~250 Mo et feraient tuer
+        // l'appli sur une box à 1 Go. Le plafond l'emporte sur la durée demandée.
+        val lowEnd = DeviceProfile.isLowEnd(context)
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(b.minMs, b.maxMs, b.startMs, b.afterRebufferMs)
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setTargetBufferBytes(if (lowEnd) LOW_END_BUFFER_BYTES else BUFFER_BYTES)
+            .setPrioritizeTimeOverSizeThresholds(false)
             .build()
+
+        // En HLS adaptatif, ne pas choisir une qualité supérieure à l'écran réel (box 720p...).
+        val trackSelector = DefaultTrackSelector(context).apply {
+            setParameters(buildUponParameters().setViewportSizeToPhysicalDisplaySize(true))
+        }
 
         val renderers = DefaultRenderersFactory(context)
             .setEnableDecoderFallback(true)
@@ -59,6 +70,7 @@ class PlayerFactory @Inject constructor(
         return ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(mediaSources)
             .setLoadControl(loadControl)
+            .setTrackSelector(trackSelector)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -68,6 +80,11 @@ class PlayerFactory @Inject constructor(
             )
             .build()
             .apply { playWhenReady = true }
+    }
+
+    private companion object {
+        const val BUFFER_BYTES = 64 * 1024 * 1024
+        const val LOW_END_BUFFER_BYTES = 24 * 1024 * 1024
     }
 
     /** Mêmes décodeurs que par défaut, mais les décodeurs logiciels passent devant. */

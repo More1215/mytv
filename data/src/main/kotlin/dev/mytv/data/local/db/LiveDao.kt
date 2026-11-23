@@ -56,6 +56,29 @@ interface LiveDao {
         channels.chunked(500).forEach { insertChannels(it) }
     }
 
+    // ------------------------------------------------------------------ Chaînes les plus regardées
+
+    @Query("INSERT OR IGNORE INTO channel_stats (portalId, streamId, playCount, lastPlayedMs) VALUES (:portalId, :streamId, 0, :nowMs)")
+    suspend fun ensureStat(portalId: Long, streamId: Long, nowMs: Long)
+
+    @Query("UPDATE channel_stats SET playCount = playCount + 1, lastPlayedMs = :nowMs WHERE portalId = :portalId AND streamId = :streamId")
+    suspend fun bumpStat(portalId: Long, streamId: Long, nowMs: Long)
+
+    @Transaction
+    suspend fun recordWatch(portalId: Long, streamId: Long, nowMs: Long) {
+        ensureStat(portalId, streamId, nowMs)
+        bumpStat(portalId, streamId, nowMs)
+    }
+
+    /** Les plus regardées d'abord ; à égalité, la plus récente. Chaînes disparues du catalogue ignorées. */
+    @Query(
+        """$SELECT_CHANNEL
+        JOIN channel_stats s ON s.portalId = c.portalId AND s.streamId = c.streamId
+        WHERE c.portalId = :portalId
+        ORDER BY s.playCount DESC, s.lastPlayedMs DESC LIMIT :limit""",
+    )
+    fun observeMostWatched(portalId: Long, limit: Int): Flow<List<ChannelWithFavorite>>
+
     @Query("SELECT EXISTS(SELECT 1 FROM live_favorites WHERE portalId = :portalId AND streamId = :streamId)")
     suspend fun isFavorite(portalId: Long, streamId: Long): Boolean
 

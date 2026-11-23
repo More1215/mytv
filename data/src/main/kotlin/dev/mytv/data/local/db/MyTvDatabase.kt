@@ -19,12 +19,14 @@ import androidx.room.RoomDatabase
         MovieEntity::class,
         SeriesEntity::class,
         ResumeEntity::class,
+        ChannelStatEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), // v2 : tables Live TV (ajout pur, aucune donnée touchée)
         AutoMigration(from = 2, to = 3), // v3 : tables VOD + positions de lecture (ajout pur)
+        AutoMigration(from = 3, to = 4), // v4 : chaînes les plus regardées (ajout pur)
     ],
 )
 abstract class MyTvDatabase : RoomDatabase() {

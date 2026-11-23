@@ -46,6 +46,18 @@ data class LiveFavoriteEntity(
 )
 
 /**
+ * Chaînes réellement regardées (≥ 20 s), pour « Accès rapide » sur l'accueil. Table séparée du
+ * catalogue : une resynchronisation ne remet pas les compteurs à zéro.
+ */
+@Entity(tableName = "channel_stats", primaryKeys = ["portalId", "streamId"])
+data class ChannelStatEntity(
+    val portalId: Long,
+    val streamId: Long,
+    val playCount: Int,
+    val lastPlayedMs: Long,
+)
+
+/**
  * Programme du guide. [generation] permet d'importer un nouveau guide pendant que l'ancien reste
  * affiché, puis de basculer d'un coup (voir LiveRepositoryImpl.refreshEpg).
  */

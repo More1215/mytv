@@ -12,6 +12,8 @@ import dev.mytv.domain.model.SeriesDetails
 import dev.mytv.domain.model.VodItem
 import dev.mytv.domain.repository.VodRepository
 import dev.mytv.domain.result.AppResult
+import androidx.paging.PagingData
+import dev.mytv.domain.model.PosterEntry
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
@@ -24,12 +26,17 @@ class ObserveVodCategoriesUseCase @Inject constructor(private val repo: VodRepos
     }
 }
 
-class ObserveMoviesUseCase @Inject constructor(private val repo: VodRepository) {
-    operator fun invoke(portalId: Long, categoryId: String): Flow<List<Movie>> = repo.observeMovies(portalId, categoryId)
-}
+/** Grille paginée de films ou de séries, et son nombre total d'éléments. */
+class ObservePosterGridUseCase @Inject constructor(private val repo: VodRepository) {
+    fun pages(portalId: Long, kind: VodKind, categoryId: String): Flow<PagingData<PosterEntry>> = when (kind) {
+        VodKind.MOVIES -> repo.pagedMovies(portalId, categoryId)
+        VodKind.SERIES -> repo.pagedSeries(portalId, categoryId)
+    }
 
-class ObserveSeriesUseCase @Inject constructor(private val repo: VodRepository) {
-    operator fun invoke(portalId: Long, categoryId: String): Flow<List<Series>> = repo.observeSeries(portalId, categoryId)
+    fun count(portalId: Long, kind: VodKind, categoryId: String): Flow<Int> = when (kind) {
+        VodKind.MOVIES -> repo.observeMovieCount(portalId, categoryId)
+        VodKind.SERIES -> repo.observeSeriesCount(portalId, categoryId)
+    }
 }
 
 class GetMovieDetailsUseCase @Inject constructor(private val repo: VodRepository) {

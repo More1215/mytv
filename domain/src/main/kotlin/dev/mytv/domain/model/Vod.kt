@@ -24,6 +24,18 @@ data class MovieDetails(
     val backdropUrl: String?,
 )
 
+/**
+ * Case d'une grille d'affiches (film ou série), réduite au strict nécessaire pour l'affichage :
+ * les grilles sont paginées et ne gardent en mémoire que quelques centaines de cases.
+ */
+data class PosterEntry(
+    val id: Long,
+    val title: String,
+    val imageUrl: String?,
+    /** Avancement de lecture (films commencés), null sinon. */
+    val progress: Float?,
+)
+
 /** Série du catalogue (liste). */
 data class Series(
     val seriesId: Long,
