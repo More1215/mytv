@@ -8,7 +8,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import android.os.Handler
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import androidx.media3.exoplayer.video.VideoRendererEventListener
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -63,7 +67,7 @@ class PlayerFactory @Inject constructor(
             setParameters(buildUponParameters().setViewportSizeToPhysicalDisplaySize(true))
         }
 
-        val renderers = DefaultRenderersFactory(context)
+        val renderers = SafeSurfaceRenderersFactory(context)
             .setEnableDecoderFallback(true)
             .apply { if (settings.decoder == DecoderMode.SOFTWARE) setMediaCodecSelector(softwareFirst) }
 
@@ -93,4 +97,47 @@ class PlayerFactory @Inject constructor(
         MediaCodecUtil.getDecoderInfos(mimeType, requiresSecure, requiresTunneling)
             .sortedBy { !it.softwareOnly }
     }
+}
+
+/**
+ * Passer du plein écran (SurfaceView) à l'aperçu (TextureView) change la surface du décodeur
+ * vidéo. Par défaut, ExoPlayer la change « à chaud » (MediaCodec.setOutputSurface) ; sur
+ * certaines puces de box bon marché (Amlogic des Xiaomi Mi Box / TV Stick...), c'est mal géré :
+ * l'image se brouille et des zones noires envahissent l'écran.
+ *
+ * Ici, chaque changement de surface recrée proprement le décodeur : une fraction de seconde de
+ * noir au lieu d'un affichage cassé, et un comportement identique sur toutes les machines.
+ */
+@OptIn(UnstableApi::class)
+private class SafeSurfaceRenderersFactory(context: Context) : DefaultRenderersFactory(context) {
+    override fun buildVideoRenderers(
+        context: Context,
+        extensionRendererMode: Int,
+        mediaCodecSelector: MediaCodecSelector,
+        enableDecoderFallback: Boolean,
+        eventHandler: Handler,
+        eventListener: VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long,
+        out: ArrayList<Renderer>,
+    ) {
+        out.add(
+            SafeSurfaceVideoRenderer(
+                context, mediaCodecSelector, allowedVideoJoiningTimeMs, enableDecoderFallback,
+                eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY,
+            ),
+        )
+    }
+}
+
+@OptIn(UnstableApi::class)
+private class SafeSurfaceVideoRenderer(
+    context: Context,
+    selector: MediaCodecSelector,
+    joiningMs: Long,
+    decoderFallback: Boolean,
+    handler: Handler,
+    listener: VideoRendererEventListener,
+    maxDropped: Int,
+) : MediaCodecVideoRenderer(context, selector, joiningMs, decoderFallback, handler, listener, maxDropped) {
+    override fun codecNeedsSetOutputSurfaceWorkaround(name: String): Boolean = true
 }

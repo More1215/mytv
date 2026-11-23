@@ -52,6 +52,9 @@ interface LiveRepository {
     /** Compte une chaîne réellement regardée (appelé après ~20 s de lecture). */
     suspend fun recordChannelWatched(portalId: Long, streamId: Long)
 
+    /** Retire une chaîne de l'« Accès rapide » (compteur remis à zéro). */
+    suspend fun forgetChannelWatched(portalId: Long, streamId: Long)
+
     /** Chaînes les plus regardées, pour l'accueil. */
     fun observeMostWatched(portalId: Long, limit: Int): Flow<List<Channel>>
 }

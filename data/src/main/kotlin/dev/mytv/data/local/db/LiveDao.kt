@@ -70,6 +70,9 @@ interface LiveDao {
         bumpStat(portalId, streamId, nowMs)
     }
 
+    @Query("DELETE FROM channel_stats WHERE portalId = :portalId AND streamId = :streamId")
+    suspend fun deleteStat(portalId: Long, streamId: Long)
+
     /** Les plus regardées d'abord ; à égalité, la plus récente. Chaînes disparues du catalogue ignorées. */
     @Query(
         """$SELECT_CHANNEL

@@ -117,6 +117,10 @@ class LiveRepositoryImpl @Inject constructor(
         liveDao.recordWatch(portalId, streamId, System.currentTimeMillis())
     }
 
+    override suspend fun forgetChannelWatched(portalId: Long, streamId: Long) = withContext(io) {
+        liveDao.deleteStat(portalId, streamId)
+    }
+
     override fun observeMostWatched(portalId: Long, limit: Int): Flow<List<Channel>> =
         liveDao.observeMostWatched(portalId, limit).map { list -> list.map { it.toDomain() } }.flowOn(io)
 

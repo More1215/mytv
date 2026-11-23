@@ -18,6 +18,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -74,11 +82,38 @@ fun HomeScreen(
     val moreResumes = continueWatching.drop(2)
     val privacy by viewModel.privacy.collectAsStateWithLifecycle()
     val liveFocus = remember { FocusRequester() }
+    val firstQuickFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { liveFocus.tryRequestFocus() }
+
+    // Retrait par appui long : le relâchement de OK qui suit ne doit pas « cliquer » la case qui
+    // reçoit ensuite le focus (sinon on ouvrait une chaîne par erreur).
+    var swallowOkUp by remember { mutableStateOf(false) }
+    var refocusAfterRemoval by remember { mutableStateOf(false) }
+    // Après un retrait, le focus reste dans la rangée (1re case), ou revient sur Live TV si elle est vide.
+    LaunchedEffect(topChannels, quickResumes) {
+        if (!refocusAfterRemoval) return@LaunchedEffect
+        withFrameNanos { }
+        if (topChannels.isNotEmpty() || quickResumes.isNotEmpty()) firstQuickFocus.tryRequestFocus() else liveFocus.tryRequestFocus()
+        refocusAfterRemoval = false
+    }
+    fun removing(action: () -> Unit) {
+        swallowOkUp = true
+        refocusAfterRemoval = true
+        action()
+    }
 
     Column(
         Modifier
             .fillMaxSize()
+            .onPreviewKeyEvent { e ->
+                val ok = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (swallowOkUp && ok && e.type == KeyEventType.KeyUp) {
+                    swallowOkUp = false
+                    true
+                } else {
+                    false
+                }
+            }
             .background(MyTvColors.Background)
             .padding(horizontal = 48.dp, vertical = 27.dp),
     ) {
@@ -110,14 +145,26 @@ fun HomeScreen(
             Spacer(Modifier.height(8.dp))
             // Rangée fixe de 4 cases au plus : pas de liste paresseuse, rien à charger en plus.
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.focusRestorer()) {
-                topChannels.forEach { channel ->
-                    QuickChannelTile(channel, onClick = { onPlayChannel(channel) })
+                topChannels.forEachIndexed { i, channel ->
+                    QuickChannelTile(
+                        channel,
+                        onClick = { onPlayChannel(channel) },
+                        onLongClick = { removing { viewModel.removeChannel(channel) } },
+                        modifier = if (i == 0) Modifier.focusRequester(firstQuickFocus) else Modifier,
+                    )
                 }
-                quickResumes.forEach { point ->
-                    QuickResumeTile(point, onClick = { onResume(point) })
+                quickResumes.forEachIndexed { i, point ->
+                    QuickResumeTile(
+                        point,
+                        onClick = { onResume(point) },
+                        onLongClick = { removing { viewModel.removeResume(point) } },
+                        modifier = if (i == 0 && topChannels.isEmpty()) Modifier.focusRequester(firstQuickFocus) else Modifier,
+                    )
                 }
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(12.dp)) // marge : la case agrandie au focus ne recouvre pas l'aide
+            Text("Appui long sur OK : retirer de l'accès rapide", style = MaterialTheme.typography.labelMedium, color = MyTvColors.OnSurfaceMuted)
+            Spacer(Modifier.height(14.dp))
         }
         if (moreResumes.isNotEmpty()) {
             Text("Continuer à regarder", style = MaterialTheme.typography.titleMedium)
@@ -186,8 +233,8 @@ private fun SectionTile(icon: String, label: String, onClick: () -> Unit, modifi
 
 /** Case large d'une chaîne souvent regardée : OK la lance directement en plein écran. */
 @Composable
-private fun QuickChannelTile(channel: Channel, onClick: () -> Unit) {
-    QuickTile(onClick) {
+private fun QuickChannelTile(channel: Channel, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+    QuickTile(onClick, onLongClick, modifier) {
         ChannelLogo(channel.logoUrl, channel.name, size = 56.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -199,9 +246,9 @@ private fun QuickChannelTile(channel: Channel, onClick: () -> Unit) {
 
 /** Case large d'un film ou épisode à reprendre : vignette, titre et avancement. */
 @Composable
-private fun QuickResumeTile(point: ResumePoint, onClick: () -> Unit) {
+private fun QuickResumeTile(point: ResumePoint, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    QuickTile(onClick) {
+    QuickTile(onClick, onLongClick, modifier) {
         Box(Modifier.size(width = 50.dp, height = 75.dp).background(MyTvColors.Background, RoundedCornerShape(6.dp))) {
             if (point.imageUrl != null) {
                 AsyncImage(
@@ -224,10 +271,11 @@ private fun QuickResumeTile(point: ResumePoint, onClick: () -> Unit) {
 }
 
 @Composable
-private fun QuickTile(onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+private fun QuickTile(onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier, content: @Composable RowScope.() -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(width = 196.dp, height = 96.dp),
+        onLongClick = onLongClick,
+        modifier = modifier.size(width = 196.dp, height = 96.dp),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(14.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = MyTvColors.Surface,

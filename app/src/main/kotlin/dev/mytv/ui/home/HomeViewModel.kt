@@ -32,8 +32,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     observeActivePortal: ObserveActivePortalUseCase,
-    observeResume: ObserveResumeUseCase,
-    channelStats: ChannelStatsUseCase,
+    private val observeResume: ObserveResumeUseCase,
+    private val channelStats: ChannelStatsUseCase,
     observeProtection: ObserveNetworkProtectionUseCase,
     private val syncLive: SyncLiveUseCase,
     private val syncVod: SyncVodUseCase,
@@ -60,5 +60,17 @@ class HomeViewModel @Inject constructor(
             syncLive(id)
             syncVod(id)
         }
+    }
+
+    /** Appui long dans « Accès rapide » : retire la chaîne (compteur à zéro). */
+    fun removeChannel(channel: Channel) = viewModelScope.launch {
+        val id = portal.value?.id ?: return@launch
+        channelStats.forget(id, channel.streamId)
+    }
+
+    /** Appui long sur une reprise : l'efface (elle disparaît aussi de « Continuer à regarder »). */
+    fun removeResume(point: ResumePoint) = viewModelScope.launch {
+        val id = portal.value?.id ?: return@launch
+        observeResume.remove(id, point.key)
     }
 }

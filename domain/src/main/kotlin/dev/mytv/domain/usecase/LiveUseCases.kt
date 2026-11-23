@@ -79,5 +79,6 @@ class LastChannelUseCase @Inject constructor(private val repo: LiveRepository) {
 /** Chaînes souvent regardées (« Accès rapide » de l'accueil). */
 class ChannelStatsUseCase @Inject constructor(private val repo: LiveRepository) {
     suspend fun recordWatched(portalId: Long, streamId: Long) = repo.recordChannelWatched(portalId, streamId)
+    suspend fun forget(portalId: Long, streamId: Long) = repo.forgetChannelWatched(portalId, streamId)
     fun mostWatched(portalId: Long, limit: Int = 2): Flow<List<Channel>> = repo.observeMostWatched(portalId, limit)
 }

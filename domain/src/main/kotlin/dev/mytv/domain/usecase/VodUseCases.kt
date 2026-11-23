@@ -60,6 +60,11 @@ class ObserveResumeUseCase @Inject constructor(private val repo: VodRepository) 
     fun one(portalId: Long, key: ContentKey): Flow<ResumePoint?> = repo.observeResumePoint(portalId, key)
     fun many(portalId: Long, keys: List<String>): Flow<Map<String, ResumePoint>> = repo.observeResumePoints(portalId, keys)
     fun continueWatching(portalId: Long): Flow<List<ResumePoint>> = repo.observeContinueWatching(portalId, limit = 20)
+
+    /** Retire un contenu de « Continuer à regarder » / « Accès rapide » (efface sa position). */
+    suspend fun remove(portalId: Long, storageKey: String) {
+        ContentKey.fromStorageKey(storageKey)?.let { repo.clearResumePoint(portalId, it) }
+    }
 }
 
 /** Synchronise le catalogue VOD s'il est périmé (ou si [force]). */

@@ -84,6 +84,18 @@ sealed interface ContentKey {
     data class EpisodeKey(val episodeId: Long) : ContentKey {
         override val storageKey get() = "episode:$episodeId"
     }
+
+    companion object {
+        /** Inverse de [storageKey] ; null si le texte n'est pas une clé connue. */
+        fun fromStorageKey(key: String): ContentKey? {
+            val id = key.substringAfter(':').toLongOrNull() ?: return null
+            return when (key.substringBefore(':')) {
+                "movie" -> MovieKey(id)
+                "episode" -> EpisodeKey(id)
+                else -> null
+            }
+        }
+    }
 }
 
 /** Position de lecture enregistrée (reprise et rangée « Continuer à regarder »). */
