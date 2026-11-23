@@ -30,6 +30,8 @@ import dev.mytv.data.network.EncryptedDns
 import dev.mytv.data.network.KillSwitchInterceptor
 import dev.mytv.data.network.VpnMonitor
 import dev.mytv.domain.repository.NetworkGuard
+import dev.mytv.domain.repository.UpdateRepository
+import dev.mytv.data.repository.UpdateRepositoryImpl
 import dev.mytv.data.repository.LiveRepositoryImpl
 import dev.mytv.data.repository.PortalRepositoryImpl
 import dev.mytv.domain.repository.LiveRepository
@@ -168,6 +170,9 @@ abstract class DataBindsModule {
 
     @Binds
     abstract fun bindBackupRepository(impl: BackupRepositoryImpl): BackupRepository
+
+    @Binds
+    abstract fun bindUpdateRepository(impl: UpdateRepositoryImpl): UpdateRepository
 }
 
 /** Qualifie le client OkHttp sans timeout global, réservé au téléchargement du guide XMLTV. */

@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 import dev.mytv.domain.repository.NetworkProtection
 import dev.mytv.domain.usecase.ObserveNetworkProtectionUseCase
 import dev.mytv.domain.usecase.SetVpnRequiredUseCase
+import dev.mytv.update.UpdateManager
+import dev.mytv.update.UpdateState
 import javax.inject.Inject
 
 data class PortalsUiState(
@@ -83,6 +85,20 @@ class PrivacySettingsViewModel @Inject constructor(
      * c'est le comportement attendu (même protection qu'au démarrage).
      */
     fun toggleRequired() = setVpnRequired(!protection.value.vpnRequired)
+}
+
+@HiltViewModel
+class UpdateSettingsViewModel @Inject constructor(private val manager: UpdateManager) : ViewModel() {
+    val state: StateFlow<UpdateState> = manager.state
+    val currentVersion: String = manager.currentVersion
+
+    /** OK : installe si une version est disponible, sinon vérifie maintenant. */
+    fun onClick() = when (state.value) {
+        is UpdateState.Available, is UpdateState.Ready -> manager.install()
+        is UpdateState.Failed -> manager.install()
+        UpdateState.Checking, is UpdateState.Downloading -> Unit
+        else -> manager.checkNow()
+    }
 }
 
 /** Valeur suivante d'une énumération, en boucle : OK fait défiler les choix d'un réglage. */

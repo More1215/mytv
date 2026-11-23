@@ -51,6 +51,8 @@ import coil3.request.ImageRequest
 import coil3.size.Size
 import dev.mytv.domain.model.Channel
 import dev.mytv.domain.model.ResumePoint
+import dev.mytv.update.UpdateState
+import androidx.tv.material3.Button
 import dev.mytv.ui.components.ChannelLogo
 import dev.mytv.ui.components.ProgramProgress
 import dev.mytv.ui.components.SingleLineText
@@ -81,6 +83,7 @@ fun HomeScreen(
     val quickResumes = continueWatching.take(2)
     val moreResumes = continueWatching.drop(2)
     val privacy by viewModel.privacy.collectAsStateWithLifecycle()
+    val update by viewModel.update.collectAsStateWithLifecycle()
     val liveFocus = remember { FocusRequester() }
     val firstQuickFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { liveFocus.tryRequestFocus() }
@@ -139,6 +142,7 @@ fun HomeScreen(
             SectionTile("🔍", "Recherche", { onSection(HomeSection.SEARCH) })
         }
 
+        UpdateBanner(update, onInstall = viewModel::installUpdate)
         Spacer(Modifier.height(22.dp))
         if (topChannels.isNotEmpty() || quickResumes.isNotEmpty()) {
             Text("Accès rapide", style = MaterialTheme.typography.titleMedium)
@@ -287,5 +291,34 @@ private fun QuickTile(onClick: () -> Unit, onLongClick: () -> Unit, modifier: Mo
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, content = content)
+    }
+}
+
+/**
+ * Bandeau « nouvelle version » : n'apparaît que s'il y a quelque chose à faire. Il ne prend
+ * jamais le focus de lui-même (Bas depuis les tuiles y mène).
+ */
+@Composable
+private fun UpdateBanner(state: UpdateState, onInstall: () -> Unit) {
+    val (text, button) = when (state) {
+        is UpdateState.Available -> "⬆ Nouvelle version ${state.update.version} disponible" to "Installer"
+        is UpdateState.Downloading -> {
+            val p = if (state.progress >= 0) " ${(state.progress * 100).toInt()} %" else "…"
+            "⬇ Téléchargement de la version ${state.update.version}$p" to null
+        }
+        is UpdateState.Ready -> "Version ${state.update.version} prête : confirme l'installation" to "Installer"
+        is UpdateState.Failed -> if (state.update != null) state.message to "Réessayer" else return
+        else -> return
+    }
+    Spacer(Modifier.height(18.dp))
+    Row(
+        Modifier
+            .background(MyTvColors.Surface, RoundedCornerShape(12.dp))
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f, fill = false))
+        if (button != null) Button(onClick = onInstall) { Text(button) }
     }
 }

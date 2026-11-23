@@ -43,13 +43,15 @@ import dev.mytv.domain.model.LiveFormat
 import dev.mytv.ui.common.tryRequestFocus
 import dev.mytv.ui.components.SingleLineText
 import dev.mytv.ui.theme.MyTvColors
+import dev.mytv.update.UpdateState
 
 enum class SettingsSection { PORTALS, PLAYER, PRIVACY, BACKUP }
 
 // ======================================================================= Hub
 
 @Composable
-fun SettingsScreen(onSection: (SettingsSection) -> Unit) {
+fun SettingsScreen(onSection: (SettingsSection) -> Unit, updates: UpdateSettingsViewModel = hiltViewModel()) {
+    val update by updates.state.collectAsStateWithLifecycle()
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { first.tryRequestFocus() }
     Page("Réglages") {
@@ -62,6 +64,19 @@ fun SettingsScreen(onSection: (SettingsSection) -> Unit) {
         SettingsRow("Lecteur", "Format des chaînes, mémoire tampon, décodage vidéo", { onSection(SettingsSection.PLAYER) })
         SettingsRow("Confidentialité", "VPN exigé ou non, ce que ton fournisseur d'accès peut voir", { onSection(SettingsSection.PRIVACY) })
         SettingsRow("Sauvegarde et restauration", "Portails, favoris et reprises, via ton PC ou ton téléphone", { onSection(SettingsSection.BACKUP) })
+        SettingsRow(
+            title = "Mises à jour · version ${updates.currentVersion}",
+            subtitle = when (val s = update) {
+                UpdateState.Idle -> "OK pour vérifier s'il existe une nouvelle version"
+                UpdateState.Checking -> "Vérification…"
+                UpdateState.UpToDate -> "✓ Tu as la dernière version"
+                is UpdateState.Available -> "⬆ Version ${s.update.version} disponible : OK pour installer"
+                is UpdateState.Downloading -> "⬇ Téléchargement… ${if (s.progress >= 0) "${(s.progress * 100).toInt()} %" else ""}"
+                is UpdateState.Ready -> "Version ${s.update.version} téléchargée : OK pour installer"
+                is UpdateState.Failed -> s.message
+            },
+            onClick = updates::onClick,
+        )
     }
 }
 

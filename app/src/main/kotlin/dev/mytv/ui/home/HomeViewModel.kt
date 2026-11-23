@@ -12,6 +12,8 @@ import dev.mytv.domain.usecase.ObserveResumeUseCase
 import dev.mytv.domain.usecase.SyncLiveUseCase
 import dev.mytv.domain.usecase.SyncVodUseCase
 import dev.mytv.ui.live.PrivacyState
+import dev.mytv.update.UpdateManager
+import dev.mytv.update.UpdateState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +36,7 @@ class HomeViewModel @Inject constructor(
     observeActivePortal: ObserveActivePortalUseCase,
     private val observeResume: ObserveResumeUseCase,
     private val channelStats: ChannelStatsUseCase,
+    private val updates: UpdateManager,
     observeProtection: ObserveNetworkProtectionUseCase,
     private val syncLive: SyncLiveUseCase,
     private val syncVod: SyncVodUseCase,
@@ -54,7 +57,13 @@ class HomeViewModel @Inject constructor(
         PrivacyState(p.vpnActive, p.vpnRequired, portal?.isEncrypted == true)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PrivacyState(false, true, false))
 
+    /** Nouvelle version disponible / téléchargement en cours (bandeau de l'accueil). */
+    val update: StateFlow<UpdateState> = updates.state
+
+    fun installUpdate() = updates.install()
+
     init {
+        updates.autoCheckOnce()
         viewModelScope.launch {
             val id = portal.filterNotNull().first().id
             syncLive(id)
