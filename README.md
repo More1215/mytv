@@ -54,6 +54,14 @@ referment le clavier. Le focus initial est toujours posé explicitement à l'ouv
 
 ## Utilisation à la télécommande
 
+**Ajouter un portail sans taper à la télécommande** : sur l'écran « Ajouter un portail »,
+« 📱 Saisir depuis mon téléphone » (sélectionné d'office, un simple OK) affiche un QR code. Scanne-le
+avec le téléphone (même Wi-Fi), puis colle le lien ou le message du fournisseur
+(`http://serveur:8080/get.php?username=…&password=…`, ou le bloc « Domain / Username / Password »),
+ou remplis les champs. La TV teste le portail, l'enregistre et passe à l'accueil. Comme pour la
+sauvegarde : réseau local uniquement, code à 6 chiffres (inclus dans le QR code), serveur arrêté dès
+qu'on quitte l'écran.
+
 **Accueil** : quatre tuiles (Live TV, Films, Séries, Recherche), puis « Accès rapide » : tes 2
 chaînes les plus regardées (comptées après 20 s de visionnage, le zapping ne compte pas) et les
 2 derniers films ou épisodes commencés. Les reprises suivantes sont dans « Continuer à regarder ». Au lancement, l'appli relance la dernière chaîne : Retour ramène à la liste des

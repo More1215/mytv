@@ -45,6 +45,7 @@ import dev.mytv.ui.home.HomeSection
 import dev.mytv.ui.live.LiveScreen
 import dev.mytv.ui.player.PlayerScreen
 import dev.mytv.ui.portal.AddPortalScreen
+import dev.mytv.ui.portal.PhonePortalScreen
 import dev.mytv.ui.privacy.VpnRequiredScreen
 import dev.mytv.ui.search.SearchScreen
 import dev.mytv.ui.settings.BackupScreen
@@ -66,6 +67,7 @@ import javax.inject.Inject
 
 private object Routes {
     const val ADD_PORTAL = "add_portal"
+    const val PHONE_PORTAL = "add_portal/phone"
     const val HOME = "home"
     const val LIVE = "live"
     const val PLAYER = "player"
@@ -181,6 +183,13 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                 // Retour depuis l'accueil quitte l'appli au lieu de revenir au formulaire.
                 onPortalSaved = { navController.restartAt(Routes.HOME) },
                 onRestore = { navController.navigate(Routes.SETTINGS_BACKUP) },
+                onPhone = { navController.navigate(Routes.PHONE_PORTAL) },
+            )
+        }
+        composable(Routes.PHONE_PORTAL) {
+            PhonePortalScreen(
+                onSaved = { navController.restartAt(Routes.HOME) },
+                onCancel = { navController.popBackStack() },
             )
         }
         composable(Routes.HOME) {

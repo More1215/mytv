@@ -1,6 +1,8 @@
 package dev.mytv.ui.common
 
+import android.content.res.Resources
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.mytv.R
 import dev.mytv.domain.model.AccountInfo
@@ -12,17 +14,20 @@ import java.util.Locale
 
 /** Traduction des erreurs métier en messages lisibles (la seule place où l'UI interprète AppError). */
 @Composable
-fun AppError.toMessage(): String = when (this) {
-    AppError.InvalidUrl -> stringResource(R.string.error_invalid_url)
-    AppError.InvalidCredentials -> stringResource(R.string.error_invalid_credentials)
-    is AppError.AccountUnavailable -> stringResource(R.string.error_account_unavailable, status.lowercase())
-    AppError.Unreachable -> stringResource(R.string.error_unreachable)
-    AppError.VpnRequired -> stringResource(R.string.error_vpn_required)
-    AppError.BackupUnreadable -> stringResource(R.string.error_backup_unreadable)
-    AppError.Timeout -> stringResource(R.string.error_timeout)
-    AppError.InvalidResponse -> stringResource(R.string.error_invalid_response)
-    is AppError.Server -> stringResource(R.string.error_server, httpCode)
-    is AppError.Unknown -> stringResource(R.string.error_unknown, message ?: "?")
+fun AppError.toMessage(): String = toMessage(LocalContext.current.resources)
+
+/** Même traduction hors Compose (ex. réponse envoyée au téléphone par le serveur local). */
+fun AppError.toMessage(res: Resources): String = when (this) {
+    AppError.InvalidUrl -> res.getString(R.string.error_invalid_url)
+    AppError.InvalidCredentials -> res.getString(R.string.error_invalid_credentials)
+    is AppError.AccountUnavailable -> res.getString(R.string.error_account_unavailable, status.lowercase())
+    AppError.Unreachable -> res.getString(R.string.error_unreachable)
+    AppError.VpnRequired -> res.getString(R.string.error_vpn_required)
+    AppError.BackupUnreadable -> res.getString(R.string.error_backup_unreadable)
+    AppError.Timeout -> res.getString(R.string.error_timeout)
+    AppError.InvalidResponse -> res.getString(R.string.error_invalid_response)
+    is AppError.Server -> res.getString(R.string.error_server, httpCode)
+    is AppError.Unknown -> res.getString(R.string.error_unknown, message ?: "?")
 }
 
 fun AccountStatus.label(): String = when (this) {

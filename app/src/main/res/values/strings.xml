@@ -15,6 +15,7 @@
     <string name="action_test">Tester la connexion</string>
     <string name="action_save">Enregistrer et continuer</string>
     <string name="action_restore_backup">Restaurer une sauvegarde</string>
+    <string name="action_phone_entry">📱 Saisir depuis mon téléphone</string>
     <string name="status_testing">Connexion au portail…</string>
     <string name="status_saving">Enregistrement…</string>
     <string name="status_success">Connexion réussie</string>

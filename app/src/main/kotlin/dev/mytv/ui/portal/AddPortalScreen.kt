@@ -36,6 +36,7 @@ import androidx.tv.material3.Text
 import dev.mytv.R
 import dev.mytv.ui.common.summaryLines
 import dev.mytv.ui.common.toMessage
+import dev.mytv.ui.common.tryRequestFocus
 import dev.mytv.ui.components.TvTextField
 import dev.mytv.ui.portal.AddPortalUiState.Phase
 import dev.mytv.ui.theme.MyTvColors
@@ -45,6 +46,8 @@ fun AddPortalScreen(
     onPortalSaved: () -> Unit,
     /** Installation neuve : restaurer une sauvegarde au lieu de tout ressaisir. */
     onRestore: () -> Unit,
+    /** Saisie depuis le téléphone (QR code) : bien plus rapide qu'au clavier de la télécommande. */
+    onPhone: () -> Unit,
     viewModel: AddPortalViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -62,6 +65,7 @@ fun AddPortalScreen(
         onTest = viewModel::test,
         onSave = viewModel::save,
         onRestore = onRestore,
+        onPhone = onPhone,
     )
 }
 
@@ -75,15 +79,18 @@ private fun AddPortalContent(
     onTest: () -> Unit,
     onSave: () -> Unit,
     onRestore: () -> Unit,
+    onPhone: () -> Unit,
 ) {
+    val phoneFocus = remember { FocusRequester() }
     val urlFocus = remember { FocusRequester() }
     val userFocus = remember { FocusRequester() }
     val passFocus = remember { FocusRequester() }
     val saveFocus = remember { FocusRequester() }
     val testFocus = remember { FocusRequester() }
 
-    // Focus initial explicite : sans lui, rien n'est sélectionné à l'ouverture et la télécommande semble morte.
-    LaunchedEffect(Unit) { urlFocus.requestFocus() }
+    // Focus initial explicite : sans lui, rien n'est sélectionné à l'ouverture et la télécommande
+    // semble morte. On part sur la saisie par téléphone, la plus rapide : un simple OK.
+    LaunchedEffect(Unit) { phoneFocus.tryRequestFocus() }
     // Après un test réussi, on amène directement le focus sur « Enregistrer ».
     LaunchedEffect(state.phase) {
         if (state.phase is Phase.Tested) saveFocus.requestFocus()
@@ -107,6 +114,8 @@ private fun AddPortalContent(
                 color = MyTvColors.OnSurfaceMuted,
             )
             Spacer(Modifier.height(20.dp))
+            Button(onClick = onPhone, modifier = Modifier.focusRequester(phoneFocus)) { Text(stringResource(R.string.action_phone_entry)) }
+            Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onRestore) { Text(stringResource(R.string.action_restore_backup)) }
             Spacer(Modifier.height(20.dp))
             StatusPanel(state.phase)

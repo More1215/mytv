@@ -1,174 +1,51 @@
 package dev.mytv.backup
 
-import java.io.BufferedInputStream
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
-import java.net.Inet4Address
-import java.net.InetSocketAddress
-import java.net.NetworkInterface
-import java.net.ServerSocket
-import java.net.Socket
-import java.net.SocketException
+import dev.mytv.lan.MiniHttpServer
+import dev.mytv.lan.MiniHttpServer.Response
 import java.net.URLDecoder
-import java.security.MessageDigest
-import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.concurrent.thread
 
 /**
- * Mini serveur web, actif UNIQUEMENT pendant que l'écran « Sauvegarde » est ouvert, pour
- * échanger le fichier de sauvegarde avec un PC ou un téléphone du même réseau local.
+ * Échange du fichier de sauvegarde avec un PC ou un téléphone du réseau local, actif UNIQUEMENT
+ * pendant que l'écran « Sauvegarde » est ouvert (serveur et sécurité : voir [MiniHttpServer]).
  *
  * Pourquoi ce choix : le Fire TV n'a pas de sélecteur de fichiers et Android 11 cloisonne le
  * stockage ; un fichier laissé sur la TV serait quasi impossible à récupérer et disparaîtrait
- * avec l'appli. Ici le fichier part directement sur l'appareil de l'utilisateur.
- *
- * Sécurité :
- * - toutes les requêtes exigent le code à 6 chiffres affiché sur la TV (comparaison à temps
- *   constant) ; après [MAX_BAD_PIN] erreurs, le serveur s'arrête ;
- * - la phrase secrète voyage dans le corps de la requête (jamais dans l'URL ni les logs) ;
- * - le fichier est de toute façon chiffré (voir BackupCrypto) ; taille d'envoi limitée.
- * Le serveur n'écoute que le réseau local : il n'est pas concerné par le kill switch VPN,
- * qui ne porte que sur les connexions SORTANTES vers Internet.
+ * avec l'appli. Ici le fichier part directement sur l'appareil de l'utilisateur. La phrase
+ * secrète voyage dans un en-tête (jamais dans l'URL) et le fichier est chiffré (BackupCrypto).
  */
 class LocalBackupServer(
     private val onExport: (passphrase: String) -> ByteArray?,
     private val onRestore: (content: ByteArray, passphrase: String) -> String,
-    private val onEvent: (String) -> Unit,
+    onEvent: (String) -> Unit,
 ) {
-    val pin: String = (SecureRandom().nextInt(900_000) + 100_000).toString()
-    private var server: ServerSocket? = null
-    @Volatile private var badPins = 0
-
-    /** Démarre l'écoute et renvoie le port, ou null si impossible. */
-    fun start(): Int? {
-        val socket = try {
-            ServerSocket().apply {
-                reuseAddress = true
-                bind(InetSocketAddress(PORT))
-            }
-        } catch (e: IOException) {
-            return null
-        }
-        server = socket
-        thread(name = "mytv-backup-server", isDaemon = true) {
-            while (!socket.isClosed) {
-                val client = try { socket.accept() } catch (_: SocketException) { break }
-                // Une requête à la fois : usage ponctuel par une seule personne.
-                runCatching { client.use { handle(it) } }
-            }
-        }
-        return PORT
-    }
-
-    fun stop() {
-        runCatching { server?.close() }
-        server = null
-    }
-
-    // ------------------------------------------------------------------ HTTP minimal
-
-    private fun handle(socket: Socket) {
-        socket.soTimeout = 15_000
-        val input = BufferedInputStream(socket.getInputStream())
-        val requestLine = readLine(input) ?: return
-        val (method, target) = requestLine.split(" ").let { (it.getOrNull(0) ?: "") to (it.getOrNull(1) ?: "/") }
-        val headers = HashMap<String, String>()
-        while (true) {
-            val line = readLine(input) ?: return
-            if (line.isEmpty()) break
-            val idx = line.indexOf(':')
-            if (idx > 0) headers[line.substring(0, idx).trim().lowercase()] = line.substring(idx + 1).trim()
-        }
-        val path = target.substringBefore('?')
-        val query = parseQuery(target.substringAfter('?', ""))
-        val out = socket.getOutputStream()
-
-        if (!checkPin(query["pin"] ?: headers["x-pin"])) {
-            respond(out, 403, "text/plain; charset=utf-8", "Code incorrect.".toByteArray())
-            if (++badPins >= MAX_BAD_PIN) {
-                onEvent("Trop de codes incorrects : partage arrêté par sécurité.")
-                stop()
-            }
-            return
-        }
-
-        val length = headers["content-length"]?.toIntOrNull() ?: 0
-        if (length > MAX_UPLOAD_BYTES) {
-            respond(out, 413, "text/plain; charset=utf-8", "Fichier trop volumineux.".toByteArray())
-            return
-        }
-        val body = if (method == "POST" && length > 0) readBody(input, length) else ByteArray(0)
-        val passphrase = headers["x-passphrase"]?.let { URLDecoder.decode(it, "UTF-8") }.orEmpty()
-
+    private val server = MiniHttpServer("mytv-backup-server", MAX_UPLOAD_BYTES, onEvent) { request ->
+        val passphrase = request.headers["x-passphrase"]?.let { URLDecoder.decode(it, "UTF-8") }.orEmpty()
         when {
-            method == "GET" && path == "/" -> respond(out, 200, "text/html; charset=utf-8", page().toByteArray())
-            method == "POST" && path == "/export" -> {
+            request.method == "GET" && request.path == "/" -> Response.html(page())
+            request.method == "POST" && request.path == "/export" -> {
                 val file = onExport(passphrase)
                 if (file == null) {
-                    respond(out, 400, "text/plain; charset=utf-8", "Phrase secrète trop courte (8 caractères minimum).".toByteArray())
+                    Response.text(400, "Phrase secrète trop courte (8 caractères minimum).")
                 } else {
                     val name = "mytv-sauvegarde-" + SimpleDateFormat("yyyy-MM-dd", Locale.FRANCE).format(Date()) + ".mytv"
-                    respond(out, 200, "application/octet-stream", file, "Content-Disposition: attachment; filename=\"$name\"")
                     onEvent("Sauvegarde téléchargée sur l'autre appareil.")
+                    Response(200, "application/octet-stream", file, "Content-Disposition: attachment; filename=\"$name\"")
                 }
             }
-            method == "POST" && path == "/restore" -> {
-                val message = onRestore(body, passphrase)
-                respond(out, 200, "text/plain; charset=utf-8", message.toByteArray())
-            }
-            else -> respond(out, 404, "text/plain; charset=utf-8", "Introuvable".toByteArray())
+            request.method == "POST" && request.path == "/restore" -> Response.text(200, onRestore(request.body, passphrase))
+            else -> Response.text(404, "Introuvable")
         }
     }
 
-    private fun checkPin(candidate: String?): Boolean =
-        candidate != null && MessageDigest.isEqual(candidate.toByteArray(), pin.toByteArray())
+    val pin: String get() = server.pin
 
-    private fun respond(out: OutputStream, code: Int, type: String, body: ByteArray, extraHeader: String? = null) {
-        val status = when (code) { 200 -> "OK"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"; else -> "Error" }
-        val head = buildString {
-            append("HTTP/1.1 $code $status\r\n")
-            append("Content-Type: $type\r\n")
-            append("Content-Length: ${body.size}\r\n")
-            append("Cache-Control: no-store\r\n")
-            extraHeader?.let { append(it).append("\r\n") }
-            append("Connection: close\r\n\r\n")
-        }
-        out.write(head.toByteArray())
-        out.write(body)
-        out.flush()
-    }
+    /** Démarre l'écoute et renvoie le port, ou null si impossible. */
+    fun start(): Int? = server.start()
 
-    private fun readLine(input: InputStream): String? {
-        val buffer = ByteArrayOutputStream()
-        while (true) {
-            val b = input.read()
-            if (b == -1) return if (buffer.size() == 0) null else buffer.toString("UTF-8")
-            if (b == '\n'.code) return buffer.toString("UTF-8").trimEnd('\r')
-            buffer.write(b)
-            if (buffer.size() > 8_192) return null // ligne d'en-tête anormalement longue
-        }
-    }
-
-    private fun readBody(input: InputStream, length: Int): ByteArray {
-        val data = ByteArray(length)
-        var read = 0
-        while (read < length) {
-            val n = input.read(data, read, length - read)
-            if (n == -1) break
-            read += n
-        }
-        return data.copyOf(read)
-    }
-
-    private fun parseQuery(q: String): Map<String, String> =
-        q.split('&').filter { it.contains('=') }.associate {
-            URLDecoder.decode(it.substringBefore('='), "UTF-8") to URLDecoder.decode(it.substringAfter('='), "UTF-8")
-        }
+    fun stop() = server.stop()
 
     /** Page affichée sur le PC / téléphone. Autonome (aucune ressource externe). */
     private fun page(): String = """
@@ -209,21 +86,8 @@ async function res(){const f=document.getElementById('f').files[0];const p=docum
 """.trimIndent()
 
     companion object {
-        const val PORT = 8765
-        private const val MAX_BAD_PIN = 5
         private const val MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
-        /**
-         * Adresse de la TV sur le réseau local (Wi-Fi ou Ethernet). On ignore les interfaces VPN
-         * (tun/ppp) : c'est l'adresse LOCALE qu'il faut taper sur le PC, pas celle du tunnel.
-         */
-        fun localAddress(): String? = runCatching {
-            NetworkInterface.getNetworkInterfaces().toList()
-                .filter { it.isUp && !it.isLoopback && !it.name.startsWith("tun") && !it.name.startsWith("ppp") }
-                .flatMap { it.inetAddresses.toList() }
-                .filterIsInstance<Inet4Address>()
-                .firstOrNull { it.isSiteLocalAddress }
-                ?.hostAddress
-        }.getOrNull()
+        fun localAddress(): String? = MiniHttpServer.localAddress()
     }
 }
