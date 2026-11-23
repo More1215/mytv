@@ -283,6 +283,14 @@ Tests unitaires (parsing Xtream, traduction des erreurs, normalisation d'URL, ma
 .\gradlew.bat :domain:test :data:testDebugUnitTest
 ```
 
+## Installer avec Downloader (le plus simple)
+
+1. Sur le Fire TV : Paramètres → Ma Fire TV → Options pour les développeurs →
+   Installer des applis inconnues → autoriser **Downloader**.
+2. Dans Downloader, saisir le lien (ou son code court, voir go.aftvnews.com) :
+   `https://github.com/More1215/mytv/releases/latest/download/mytv.apk`
+3. Ce lien pointe toujours vers la dernière version : il sert aussi pour les mises à jour.
+
 ## Installer sur le Fire TV Stick par ADB (Wi-Fi)
 
 ### 1. Une seule fois, sur le Fire TV
