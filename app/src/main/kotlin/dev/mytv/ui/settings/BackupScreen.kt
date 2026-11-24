@@ -1,5 +1,6 @@
 package dev.mytv.ui.settings
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -49,6 +51,7 @@ data class BackupUiState(
 @HiltViewModel
 class BackupViewModel @Inject constructor(
     private val backup: BackupUseCase,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(BackupUiState())
@@ -77,7 +80,7 @@ class BackupViewModel @Inject constructor(
             onEvent = ::addEvent,
         )
         val port = s.start()
-        val ip = LocalBackupServer.localAddress()
+        val ip = LocalBackupServer.localAddress(context)
         if (port == null || ip == null) {
             _state.update { it.copy(error = "Impossible d'ouvrir le partage : la TV doit être connectée au réseau local (Wi-Fi ou Ethernet).") }
             s.stop()

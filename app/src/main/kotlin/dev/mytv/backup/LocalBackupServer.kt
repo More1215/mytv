@@ -88,6 +88,6 @@ async function res(){const f=document.getElementById('f').files[0];const p=docum
     companion object {
         private const val MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 
-        fun localAddress(): String? = MiniHttpServer.localAddress()
+        fun localAddress(context: android.content.Context): String? = MiniHttpServer.localAddress(context)
     }
 }

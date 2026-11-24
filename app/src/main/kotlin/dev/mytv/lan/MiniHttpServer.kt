@@ -1,5 +1,8 @@
 package dev.mytv.lan
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -203,16 +206,48 @@ class MiniHttpServer(
         private fun decode(s: String): String = runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
 
         /**
-         * Adresse de la TV sur le réseau local (Wi-Fi ou Ethernet). On ignore les interfaces VPN
-         * (tun/ppp) : c'est l'adresse LOCALE qu'il faut ouvrir sur le téléphone, pas celle du tunnel.
+         * Adresse de la TV sur le réseau local (Wi-Fi ou Ethernet), celle que le téléphone doit ouvrir.
+         *
+         * 1. On demande à Android le réseau Ethernet ou Wi-Fi réel (hors VPN) : c'est fiable.
+         * 2. À défaut, on parcourt les interfaces en écartant celles où le téléphone ne peut pas
+         *    joindre la TV : Wi-Fi Direct / Miracast (p2p, souvent 192.168.49.1), point d'accès de
+         *    la box (ap, swlan), VPN (tun, ppp, wg, ipsec), données mobiles (rmnet), docker...
+         *    Prendre l'une d'elles donnait une page qui charge indéfiniment sur le téléphone.
          */
-        fun localAddress(): String? = runCatching {
+        fun localAddress(context: Context): String? =
+            runCatching { fromConnectivity(context) }.getOrNull() ?: runCatching { fromInterfaces() }.getOrNull()
+
+        private fun fromConnectivity(context: Context): String? {
+            val cm = context.getSystemService(ConnectivityManager::class.java) ?: return null
+            @Suppress("DEPRECATION") // getAllNetworks : seule API disponible dès Android 7.
+            val candidates = cm.allNetworks.mapNotNull { network ->
+                val caps = cm.getNetworkCapabilities(network) ?: return@mapNotNull null
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return@mapNotNull null
+                val rank = when {
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> 0
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> 1
+                    else -> return@mapNotNull null
+                }
+                val ip = cm.getLinkProperties(network)?.linkAddresses
+                    ?.map { it.address }
+                    ?.filterIsInstance<Inet4Address>()
+                    ?.firstOrNull { it.isSiteLocalAddress }
+                    ?: return@mapNotNull null
+                rank to ip.hostAddress
+            }
+            return candidates.minByOrNull { it.first }?.second
+        }
+
+        private val IGNORED = listOf("tun", "ppp", "wg", "ipsec", "p2p", "ap", "swlan", "softap", "rmnet", "ccmni", "dummy", "docker", "veth", "br-", "lo")
+
+        private fun fromInterfaces(): String? =
             NetworkInterface.getNetworkInterfaces().toList()
-                .filter { it.isUp && !it.isLoopback && !it.name.startsWith("tun") && !it.name.startsWith("ppp") }
+                .filter { nif -> nif.isUp && !nif.isLoopback && IGNORED.none { nif.name.startsWith(it) } }
+                // Ethernet puis Wi-Fi d'abord, les noms inconnus en dernier.
+                .sortedBy { nif -> when { nif.name.startsWith("eth") -> 0; nif.name.startsWith("wlan") -> 1; else -> 2 } }
                 .flatMap { it.inetAddresses.toList() }
                 .filterIsInstance<Inet4Address>()
                 .firstOrNull { it.isSiteLocalAddress }
                 ?.hostAddress
-        }.getOrNull()
     }
 }

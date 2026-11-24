@@ -86,7 +86,7 @@ class PhonePortalViewModel @Inject constructor(
         if (server != null) return
         val s = PortalWebServer(onSubmit = ::submit, onEvent = { text -> _state.update { it.copy(status = text, statusIsError = true) } })
         val port = s.start()
-        val ip = MiniHttpServer.localAddress()
+        val ip = MiniHttpServer.localAddress(context)
         if (port == null || ip == null) {
             s.stop()
             _state.update { it.copy(error = "Impossible d'ouvrir la saisie : la TV doit être connectée au réseau local (Wi-Fi ou Ethernet).") }
@@ -186,6 +186,11 @@ fun PhonePortalScreen(
                     modifier = Modifier
                         .background(MyTvColors.Surface, RoundedCornerShape(10.dp))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+                Text(
+                    "La page charge sans fin ? Le téléphone n'atteint pas la TV : vérifie qu'il est sur le même Wi-Fi (pas un Wi-Fi « invité »), puis coupe ses données mobiles et son VPN.",
+                    color = MyTvColors.OnSurfaceMuted,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
             state.status?.let {
