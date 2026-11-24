@@ -62,8 +62,10 @@ class HomeViewModel @Inject constructor(
 
     fun installUpdate() = updates.install()
 
+    /** À chaque affichage de l'accueil (y compris au retour de veille) ; limité à une fois / 6 h. */
+    fun checkForUpdate() = updates.autoCheck()
+
     init {
-        updates.autoCheckOnce()
         viewModelScope.launch {
             val id = portal.filterNotNull().first().id
             syncLive(id)

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -39,8 +40,9 @@ sealed interface UpdateState {
 
 /**
  * Vérifie, télécharge et installe les nouvelles versions publiées sur GitHub.
- * Partagé par l'accueil (bandeau) et les réglages. Vérification automatique une seule fois par
- * lancement de l'appli, et seulement en version release.
+ * Partagé par l'accueil (bandeau) et les réglages. Vérification automatique (release seulement)
+ * à chaque retour sur l'accueil, au plus une fois toutes les [AUTO_CHECK_INTERVAL_MS] : un Fire TV
+ * ne quitte jamais l'appli, une vérification au seul lancement ne voyait jamais les nouvelles versions.
  */
 @Singleton
 class UpdateManager @Inject constructor(
@@ -54,14 +56,25 @@ class UpdateManager @Inject constructor(
 
     val currentVersion: String = BuildConfig.VERSION_NAME
 
-    private var autoCheckDone = false
+    private var lastAutoCheck = 0L
     private var downloadedPath: String? = null
     private var job: Job? = null
 
-    /** Au lancement : une seule vérification silencieuse (rien n'est affiché si l'appli est à jour). */
-    fun autoCheckOnce() {
-        if (autoCheckDone || BuildConfig.DEBUG) return
-        autoCheckDone = true
+    /**
+     * Vérification silencieuse (rien n'est affiché si l'appli est à jour ou hors ligne). Appelée à
+     * chaque affichage de l'accueil ; une simple requête HTTP, au plus toutes les 6 h.
+     */
+    fun autoCheck() {
+        if (BuildConfig.DEBUG) return
+        // Une mise à jour est déjà proposée ou en cours : on n'y touche pas.
+        when (val s = _state.value) {
+            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready -> return
+            is UpdateState.Failed -> if (s.update != null) return
+            else -> Unit
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (lastAutoCheck != 0L && now - lastAutoCheck < AUTO_CHECK_INTERVAL_MS) return
+        lastAutoCheck = now
         checkNow()
     }
 
@@ -149,6 +162,7 @@ class UpdateManager @Inject constructor(
     }
 
     private companion object {
+        const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
         const val PERMISSION_HELP =
             "Autorise MyTV : Paramètres → Ma Fire TV → Options pour les développeurs → Installer des applis inconnues → MyTV. " +
                 "Ou utilise Downloader (code 6651995)."

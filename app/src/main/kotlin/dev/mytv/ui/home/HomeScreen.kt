@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -84,6 +85,11 @@ fun HomeScreen(
     val moreResumes = continueWatching.drop(2)
     val privacy by viewModel.privacy.collectAsStateWithLifecycle()
     val update by viewModel.update.collectAsStateWithLifecycle()
+    // Chaque retour sur l'accueil (ou sortie de veille) relance la vérification, limitée à 1 fois / 6 h.
+    LifecycleResumeEffect(Unit) {
+        viewModel.checkForUpdate()
+        onPauseOrDispose { }
+    }
     val liveFocus = remember { FocusRequester() }
     val firstQuickFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { liveFocus.tryRequestFocus() }
