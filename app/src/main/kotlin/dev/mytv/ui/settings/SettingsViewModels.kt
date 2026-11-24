@@ -94,7 +94,7 @@ class UpdateSettingsViewModel @Inject constructor(private val manager: UpdateMan
 
     /** OK : installe si une version est disponible, sinon vérifie maintenant. */
     fun onClick() = when (state.value) {
-        is UpdateState.Available, is UpdateState.Ready -> manager.install()
+        is UpdateState.Available, is UpdateState.Ready, is UpdateState.NeedsPermission -> manager.install()
         is UpdateState.Failed -> manager.install()
         UpdateState.Checking, is UpdateState.Downloading -> Unit
         else -> manager.checkNow()

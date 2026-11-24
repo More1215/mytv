@@ -1,5 +1,6 @@
 package dev.mytv.update
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -34,6 +35,11 @@ sealed interface UpdateState {
     data class Downloading(val update: AppUpdate, val progress: Float) : UpdateState
     /** APK téléchargé : l'installateur Android a été (ou doit être) ouvert. */
     data class Ready(val update: AppUpdate, val path: String) : UpdateState
+    /**
+     * APK téléchargé, mais Android exige d'abord d'autoriser MyTV à installer des applis : on
+     * l'explique AVANT d'ouvrir le réglage (sinon le client tombe sur un menu sans savoir quoi faire).
+     */
+    data class NeedsPermission(val update: AppUpdate, val path: String) : UpdateState
     /** [update] non nul : l'erreur concerne le téléchargement/l'installation (on peut réessayer). */
     data class Failed(val message: String, val update: AppUpdate?) : UpdateState
 }
@@ -68,7 +74,7 @@ class UpdateManager @Inject constructor(
         if (BuildConfig.DEBUG) return
         // Une mise à jour est déjà proposée ou en cours : on n'y touche pas.
         when (val s = _state.value) {
-            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready -> return
+            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready, is UpdateState.NeedsPermission -> return
             is UpdateState.Failed -> if (s.update != null) return
             else -> Unit
         }
@@ -93,6 +99,11 @@ class UpdateManager @Inject constructor(
     fun install() {
         when (val s = _state.value) {
             is UpdateState.Ready -> openInstaller(s.update, s.path)
+            is UpdateState.NeedsPermission ->
+                if (canInstall()) openInstaller(s.update, s.path)
+                else if (!start(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))) {
+                    _state.value = UpdateState.Failed(PERMISSION_HELP, s.update)
+                }
             is UpdateState.Available -> startDownload(s.update)
             is UpdateState.Failed -> {
                 val update = s.update ?: return checkNow()
@@ -131,16 +142,9 @@ class UpdateManager @Inject constructor(
 
     private fun openInstaller(update: AppUpdate, path: String) {
         // Android 8+ : l'utilisateur doit autoriser MyTV à installer des applis (une seule fois).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
-            val opened = start(
-                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
-            )
-            // Le fichier est gardé : le prochain « Installer » le réutilise sans retélécharger.
-            _state.value = UpdateState.Failed(
-                if (opened) "Autorise MyTV à installer des applis, puis reviens et appuie encore sur « Installer »."
-                else PERMISSION_HELP,
-                update,
-            )
+        if (!canInstall()) {
+            // Le fichier est gardé : une fois l'autorisation donnée, il est réutilisé sans retélécharger.
+            _state.value = UpdateState.NeedsPermission(update, path)
             return
         }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", File(path))
@@ -152,8 +156,25 @@ class UpdateManager @Inject constructor(
         }
     }
 
+    private fun canInstall() =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
+
+    /**
+     * Retour dans l'appli (onResume) : si le client vient d'autoriser MyTV dans le réglage,
+     * l'installation se lance toute seule, sans qu'il ait à rappuyer sur « Installer ».
+     */
+    fun onAppResumed(activity: Activity) {
+        this.activity = java.lang.ref.WeakReference(activity)
+        val s = _state.value as? UpdateState.NeedsPermission ?: return
+        if (canInstall()) openInstaller(s.update, s.path)
+    }
+
+    /** Dernière activité affichée : le réglage s'ouvre dans la pile de MyTV, Retour y ramène. */
+    private var activity: java.lang.ref.WeakReference<Activity>? = null
+
     private fun start(intent: Intent): Boolean = try {
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val a = activity?.get()?.takeUnless { it.isFinishing }
+        if (a != null) a.startActivity(intent) else context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true
     } catch (_: ActivityNotFoundException) {
         false

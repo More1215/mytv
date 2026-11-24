@@ -323,6 +323,7 @@ private fun UpdateBanner(state: UpdateState, onInstall: () -> Unit) {
             "⬇ Téléchargement de la version ${state.update.version}$p" to null
         }
         is UpdateState.Ready -> "Version ${state.update.version} prête : confirme l'installation" to "Installer"
+        is UpdateState.NeedsPermission -> PERMISSION_STEP to "Ouvrir le réglage"
         is UpdateState.Failed -> if (state.update != null) state.message to "Réessayer" else return
         else -> return
     }
@@ -338,3 +339,8 @@ private fun UpdateBanner(state: UpdateState, onInstall: () -> Unit) {
         if (button != null) Button(onClick = onInstall) { Text(button) }
     }
 }
+
+/** Explication affichée avant d'ouvrir le réglage Android « Installer des applis inconnues ». */
+const val PERMISSION_STEP =
+    "Pour installer la mise à jour, Android demande d'autoriser MyTV une seule fois : " +
+        "dans le menu qui va s'ouvrir, active MyTV (« Autoriser cette source »), puis reviens dans MyTV et appuie encore sur « Installer »."

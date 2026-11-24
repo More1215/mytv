@@ -17,6 +17,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var remote: RemoteControl
+    @Inject lateinit var updates: dev.mytv.update.UpdateManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +36,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         remote.attach(this)
+        updates.onAppResumed(this) // retour du réglage « applis inconnues » : l'installation reprend seule
     }
 
     override fun onPause() {

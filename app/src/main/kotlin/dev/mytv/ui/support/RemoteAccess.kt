@@ -22,7 +22,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.mytv.BuildConfig
 import dev.mytv.remote.RemoteControl
 import dev.mytv.remote.RemoteControl.Status
 import dev.mytv.ui.common.tryRequestFocus
@@ -33,9 +32,6 @@ import kotlinx.coroutines.flow.first
 
 @HiltViewModel
 class RemoteAccessViewModel @Inject constructor(val remote: RemoteControl) : ViewModel()
-
-/** Adresse de la page à ouvrir sur le PC, sans « https:// » (plus court à dicter). */
-val remotePageAddress: String get() = BuildConfig.REMOTE_RELAY.substringAfter("://")
 
 /**
  * Réglages → Support → Code d'accès (aussi accessible depuis l'ajout de portail, pour une box neuve).
@@ -55,11 +51,6 @@ fun RemoteAccessScreen(onClose: () -> Unit, viewModel: RemoteAccessViewModel = h
     }
     Page("Aide à distance") {
         Text(
-            "La personne qui t'aide ouvre $remotePageAddress sur son ordinateur et tape ce code. " +
-                "Elle verra ton écran MyTV et pourra le piloter comme avec la télécommande, depuis chez elle.",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Text(
             state.code ?: "…",
             style = MaterialTheme.typography.displaySmall,
             color = MyTvColors.Accent,
@@ -72,6 +63,11 @@ fun RemoteAccessScreen(onClose: () -> Unit, viewModel: RemoteAccessViewModel = h
             style = MaterialTheme.typography.bodyLarge,
             color = if (state.status == Status.OFFLINE || state.status == Status.VPN_REQUIRED) MyTvColors.Error else MyTvColors.OnSurfaceMuted,
         )
+        state.detail?.let {
+            if (state.status == Status.OFFLINE || state.status == Status.CONNECTING) {
+                Text("Raison : $it", style = MaterialTheme.typography.bodyMedium, color = MyTvColors.OnSurfaceMuted)
+            }
+        }
         state.event?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MyTvColors.Success) }
         Text(
             "L'aide reste active pendant que tu utilises MyTV (bandeau rouge en haut de l'écran). " +
@@ -90,7 +86,7 @@ private fun statusText(status: Status) = when (status) {
     Status.OFF, Status.CONNECTING -> "Connexion au relais…"
     Status.WAITING -> "Prêt : en attente de la personne qui t'aide."
     Status.CONNECTED -> "Connecté : la personne qui t'aide voit ton écran."
-    Status.OFFLINE -> "Pas d'accès à Internet pour l'instant, nouvel essai automatique…"
+    Status.OFFLINE -> "Le relais d'aide est injoignable, nouvel essai automatique…"
     Status.VPN_REQUIRED -> "Bloqué : active ton VPN (ou mets « Exiger un VPN » sur Non)."
 }
 

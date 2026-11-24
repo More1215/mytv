@@ -71,6 +71,8 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
         val status: Status = Status.OFF,
         /** Dernier événement à afficher sur la TV (ex. « La personne qui t'aide est connectée »). */
         val event: String? = null,
+        /** Pourquoi le relais est injoignable (affiché sous le statut, pour le dépannage). */
+        val detail: String? = null,
     )
 
     /** Demandes de navigation venues du PC, exécutées par le NavHost. */
@@ -115,7 +117,8 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
     }
 
     private fun event(text: String?) = _state.update { it.copy(event = text) }
-    private fun status(s: Status) = _state.update { if (it.status == Status.OFF) it else it.copy(status = s) }
+    private fun status(s: Status, detail: String? = null) =
+        _state.update { if (it.status == Status.OFF) it else it.copy(status = s, detail = detail) }
 
     /** Une session = un code ; tout se passe sur son thread [h], sauf les touches (thread principal). */
     private inner class Session(code: String) {
@@ -127,6 +130,13 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
         private var ws: WebSocket? = null
         private var backoff = 2_000L
         private var peer = false
+        /**
+         * Secours : certaines box (vieux certificats racine, heure fausse, filtrage HTTPS) n'arrivent
+         * pas à ouvrir la connexion chiffrée vers le relais. On alterne alors avec la connexion
+         * simple : le contenu reste chiffré de bout en bout avec le code (AES-GCM), le relais et le
+         * réseau ne voient toujours que des octets illisibles.
+         */
+        private var plain = false
 
         // Copie d'écran : tampons réutilisés, aucune allocation par image.
         @Volatile private var bitmap: Bitmap? = null
@@ -148,8 +158,9 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
         fun open() = h.post {
             if (closed) return@post
             if (!::crypto.isInitialized) crypto = Crypto(normalized) // PBKDF2 : hors du thread principal
-            status(Status.CONNECTING)
-            val request = Request.Builder().url("${BuildConfig.REMOTE_RELAY}/ws?room=${crypto.room}&role=tv").build()
+            status(Status.CONNECTING, _state.value.detail) // garde la raison du dernier échec visible
+            val base = if (plain) BuildConfig.REMOTE_RELAY.replaceFirst("https://", "http://") else BuildConfig.REMOTE_RELAY
+            val request = Request.Builder().url("$base/ws?room=${crypto.room}&role=tv").build()
             ws = client.newWebSocket(request, listener)
             h.removeCallbacks(autoStop)
             h.postDelayed(autoStop, AUTO_STOP_MS)
@@ -194,20 +205,21 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                h.post { lost(webSocket, t is VpnRequiredException) }
+                h.post { lost(webSocket, t is VpnRequiredException, describe(t, response)) }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                h.post { lost(webSocket, false) }
+                h.post { lost(webSocket, false, "connexion fermée par le relais ($code)") }
             }
         }
 
         /** Connexion au relais perdue : nouvel essai, de plus en plus espacé (2 s → 30 s). */
-        private fun lost(socket: WebSocket, vpn: Boolean) {
+        private fun lost(socket: WebSocket, vpn: Boolean, why: String?) {
             if (closed || socket !== ws) return
             ws = null
             peerLeft()
-            status(if (vpn) Status.VPN_REQUIRED else Status.OFFLINE)
+            status(if (vpn) Status.VPN_REQUIRED else Status.OFFLINE, why)
+            if (!vpn) plain = !plain // prochain essai par l'autre chemin
             h.postDelayed({ open() }, backoff)
             backoff = (backoff * 2).coerceAtMost(30_000L)
         }
@@ -248,6 +260,22 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
                 }
                 // L'aidant a cliqué « Terminer » : l'aide s'arrête complètement (le bandeau disparaît).
                 "bye" -> main.post { if (session === this) stop() }
+            }
+        }
+
+        /** Raison lisible d'un échec de connexion, pour que le client puisse la dicter. */
+        private fun describe(t: Throwable, response: Response?): String {
+            if (response != null) return "le relais a répondu ${response.code}"
+            val chain = generateSequence(t) { it.cause }.toList()
+            fun has(name: String) = chain.any { it.javaClass.name.contains(name) }
+            return when {
+                has("UnknownHost") -> "adresse du relais introuvable (DNS)"
+                has("CertPath") || has("Certificate") || has("SSL") ->
+                    "connexion sécurisée refusée — vérifie l'heure de la box (" +
+                        java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.FRANCE).format(java.util.Date()) + ")"
+                has("SocketTimeout") || has("InterruptedIO") -> "le relais ne répond pas (délai dépassé)"
+                has("ConnectException") || has("NoRouteToHost") -> "connexion au relais refusée par le réseau"
+                else -> t.javaClass.simpleName + (t.message?.let { " : " + it.take(80) } ?: "")
             }
         }
 

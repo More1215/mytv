@@ -75,6 +75,7 @@ fun SettingsScreen(onSection: (SettingsSection) -> Unit, updates: UpdateSettings
                 is UpdateState.Available -> "⬆ Version ${s.update.version} disponible : OK pour installer"
                 is UpdateState.Downloading -> "⬇ Téléchargement… ${if (s.progress >= 0) "${(s.progress * 100).toInt()} %" else ""}"
                 is UpdateState.Ready -> "Version ${s.update.version} téléchargée : OK pour installer"
+                is UpdateState.NeedsPermission -> "${dev.mytv.ui.home.PERMISSION_STEP} OK pour ouvrir le réglage."
                 is UpdateState.Failed -> s.message
             },
             onClick = updates::onClick,
