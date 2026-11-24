@@ -79,7 +79,8 @@ Une barre sous l'affiche montre où l'on s'est arrêté.
 |---|---|
 | OK ou ⏯ | pause / lecture |
 | Gauche / ⏪ | -10 s · Droite / ⏩ : +30 s (les appuis rapprochés se cumulent) |
-| Haut / Bas | afficher les commandes |
+| Haut | afficher les commandes |
+| Bas ou ☰ | réglages de lecture : audio, sous-titres (et leur taille), format d'image (adapté / zoom / étiré), vitesse |
 | Retour | quitter (la position est enregistrée) |
 
 En fin d'épisode, l'épisode suivant démarre après 10 s, sauf si tu choisis « Annuler ».
@@ -141,8 +142,8 @@ Sécurité :
 
 | Touche | Action |
 |---|---|
-| Haut / CH+ | chaîne suivante · Bas / CH- : chaîne précédente |
-| Gauche ou OK | sélecteur de chaînes : catégories à gauche, chaînes à droite, ouvert sur la chaîne en cours |
+| Haut / Bas (ou CH- / CH+) | liste transparente des chaînes à gauche ; on s'arrête ~1 s sur une chaîne et elle se lance (OK : tout de suite, Retour : annuler) |
+| Gauche ou OK | sélecteur complet : catégories à gauche, chaînes à droite, ouvert sur la chaîne en cours (Droite depuis les chaînes : retour à la vidéo) |
 | Droite | afficher les infos du programme et l'heure |
 | Menu (☰) | ajouter ou retirer des favoris |
 | Retour | ferme le sélecteur, sinon revient à la liste (la lecture continue en aperçu) |

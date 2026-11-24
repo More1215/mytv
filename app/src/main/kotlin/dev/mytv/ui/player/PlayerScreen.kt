@@ -106,9 +106,41 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
         }
     }
 
-    BackHandler {
-        if (browserOpen) browserOpen = false else onBack()
+    // Liste de zapping (Haut/Bas) : index de la chaîne surlignée, null = liste fermée.
+    var zapIndex by remember { mutableStateOf<Int?>(null) }
+    var zapTick by remember { mutableIntStateOf(0) }
+    val zapList = state.zapList
+
+    fun moveZap(delta: Int) {
+        if (zapList.isEmpty()) return
+        val base = zapIndex ?: zapList.indexOfFirst { it.streamId == state.channel?.streamId }.coerceAtLeast(0)
+        zapIndex = Math.floorMod(base + delta, zapList.size)
+        zapTick++
     }
+
+    fun commitZap() {
+        zapIndex?.let { zapList.getOrNull(it) }?.let(playback::zapTo)
+        zapIndex = null
+    }
+
+    // On s'arrête sur une chaîne ~1 s : elle se lance ; la liste reste un instant puis disparaît.
+    LaunchedEffect(zapTick) {
+        val index = zapIndex ?: return@LaunchedEffect
+        delay(ZAP_COMMIT_MS)
+        zapList.getOrNull(index)?.let(playback::zapTo)
+        delay(ZAP_LINGER_MS)
+        zapIndex = null
+    }
+
+    fun back() {
+        when {
+            browserOpen -> browserOpen = false
+            zapIndex != null -> zapIndex = null // ferme la liste sans changer de chaîne
+            else -> onBack()
+        }
+    }
+
+    BackHandler { back() }
 
     fun openBrowser() {
         playback.openBrowser()
@@ -125,7 +157,7 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
             .onPreviewKeyEvent { event ->
                 if (event.key != Key.Back) return@onPreviewKeyEvent false
                 if (event.type == KeyEventType.KeyUp) {
-                    if (browserOpen) browserOpen = false else onBack()
+                    back()
                 }
                 true
             }
@@ -140,9 +172,12 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
                     return@onKeyEvent rootFocused && event.key in BROWSER_NAV_KEYS && browserFocus.tryRequestFocus()
                 }
                 when (event.key) {
-                    Key.DirectionUp, Key.ChannelUp -> { playback.zap(+1); true }
-                    Key.DirectionDown, Key.ChannelDown -> { playback.zap(-1); true }
-                    Key.DirectionLeft, Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { openBrowser(); true }
+                    // Haut/Bas suivent la liste à l'écran ; CH+ / CH- gardent leur sens habituel.
+                    Key.DirectionUp, Key.ChannelDown -> { moveZap(-1); true }
+                    Key.DirectionDown, Key.ChannelUp -> { moveZap(+1); true }
+                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter ->
+                        { if (zapIndex != null) commitZap() else openBrowser(); true }
+                    Key.DirectionLeft -> { zapIndex = null; openBrowser(); true }
                     Key.DirectionRight, Key.Info -> { bannerTrigger++; true }
                     Key.Menu -> { playback.toggleCurrentFavorite(); bannerTrigger++; true }
                     else -> false
@@ -177,12 +212,16 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
         }
 
         AnimatedVisibility(
-            visible = (bannerVisible || state.error != null) && !browserOpen,
+            visible = (bannerVisible || state.error != null) && !browserOpen && zapIndex == null,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             InfoBanner(state)
+        }
+
+        zapIndex?.let { index ->
+            if (!browserOpen) ZapList(zapList, index, playingId = state.channel?.streamId, modifier = Modifier.align(Alignment.CenterStart))
         }
 
         if (browserOpen) {
@@ -200,6 +239,7 @@ fun PlayerScreen(playback: PlaybackViewModel, onBack: () -> Unit) {
                     browserOpen = false
                 },
                 focusFallback = browserFocus,
+                onClose = { browserOpen = false },
                 modifier = Modifier.align(Alignment.CenterStart),
             )
         }
@@ -252,7 +292,7 @@ private fun InfoBanner(state: PlaybackUiState) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            "▲▼ Zapper   ·   ◀ ou OK Chaînes   ·   ▶ Infos   ·   ☰ Favori",
+            "▲▼ Liste des chaînes   ·   ◀ ou OK Toutes les chaînes   ·   ▶ Infos   ·   ☰ Favori",
             style = MaterialTheme.typography.labelMedium,
             color = MyTvColors.OnSurfaceMuted,
         )
@@ -262,7 +302,8 @@ private fun InfoBanner(state: PlaybackUiState) {
 /**
  * Sélecteur de chaînes sans quitter le plein écran : catégories à gauche, chaînes à droite.
  * Il s'ouvre sur la catégorie et la chaîne en cours ; Gauche passe aux catégories, Droite revient
- * aux chaînes, OK lance la chaîne (le zapping continue ensuite dans sa catégorie).
+ * aux chaînes puis, depuis les chaînes, referme le sélecteur. OK lance la chaîne (le zapping
+ * continue ensuite dans sa catégorie).
  */
 @Composable
 private fun ChannelBrowser(
@@ -274,6 +315,8 @@ private fun ChannelBrowser(
     onSelect: (Channel) -> Unit,
     /** Posé sur la liste des chaînes : y envoie le focus (première chaîne visible). */
     focusFallback: FocusRequester,
+    /** Droite depuis la liste des chaînes : on referme et on retrouve la vidéo. */
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val channelState = rememberLazyListState()
@@ -366,6 +409,15 @@ private fun ChannelBrowser(
                     modifier = Modifier
                         .fillMaxSize()
                         .focusRequester(focusFallback)
+                        // Droite = retour à la vidéo (symétrique de Gauche qui a ouvert le sélecteur).
+                        .onPreviewKeyEvent { e ->
+                            if (e.key == Key.DirectionRight && e.type == KeyEventType.KeyDown) {
+                                onClose()
+                                true
+                            } else {
+                                false
+                            }
+                        }
                         .focusProperties { right = FocusRequester.Cancel }
                         .focusRestorer(),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -440,6 +492,58 @@ private fun ErrorPanel(
 }
 
 private const val BANNER_DURATION_MS = 5_000L
+private const val ZAP_COMMIT_MS = 900L
+private const val ZAP_LINGER_MS = 1_500L
+
+/**
+ * Liste de zapping transparente (Haut/Bas en plein écran). Sans focus ni liste paresseuse :
+ * seules les 7 lignes autour de la sélection sont dessinées, en boucle aux extrémités.
+ * Très léger, même sur une petite box.
+ */
+@Composable
+private fun ZapList(channels: List<Channel>, selected: Int, playingId: Long?, modifier: Modifier = Modifier) {
+    if (channels.isEmpty()) return
+    val window = minOf(ZAP_WINDOW, channels.size)
+    val half = window / 2
+    Column(
+        modifier
+            .fillMaxHeight()
+            .width(460.dp)
+            .background(Brush.horizontalGradient(listOf(Color(0xE6000000), Color(0x99000000), Color.Transparent)))
+            .padding(start = 32.dp, end = 48.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+    ) {
+        for (offset in -half until window - half) {
+            val channel = channels[Math.floorMod(selected + offset, channels.size)]
+            val isSelected = offset == 0
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .background(if (isSelected) MyTvColors.Accent else Color.Transparent, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    channel.number.toString(),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (isSelected) Color.White else MyTvColors.OnSurfaceMuted,
+                    modifier = Modifier.width(52.dp),
+                )
+                ChannelLogo(channel.logoUrl, channel.name, size = 36.dp)
+                Spacer(Modifier.width(10.dp))
+                SingleLineText(
+                    (if (channel.streamId == playingId) "▶ " else "") + channel.name,
+                    style = if (isSelected) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+                    color = if (isSelected) Color.White else Color(0xFFE6E9EE),
+                )
+            }
+        }
+        Text("OK : regarder · Retour : fermer", style = MaterialTheme.typography.labelMedium, color = MyTvColors.OnSurfaceMuted)
+    }
+}
+
+private const val ZAP_WINDOW = 7
 
 private val BROWSER_NAV_KEYS = setOf(
     Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight,

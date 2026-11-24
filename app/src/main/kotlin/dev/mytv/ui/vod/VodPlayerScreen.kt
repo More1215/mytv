@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -44,6 +45,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
+import dev.mytv.player.VideoScale
 import dev.mytv.player.VideoSurface
 import dev.mytv.player.VodPlayerViewModel
 import dev.mytv.ui.common.toMessage
@@ -66,6 +68,10 @@ fun VodPlayerScreen(onBack: () -> Unit, viewModel: VodPlayerViewModel = hiltView
     val rootFocus = remember { FocusRequester() }
     var controlsTrigger by remember { mutableIntStateOf(1) }
     var controlsVisible by remember { mutableStateOf(true) }
+    // Panneau « Bas » : audio, sous-titres, format d'image, vitesse.
+    var settingsOpen by remember { mutableStateOf(false) }
+    var scale by remember { mutableStateOf(VideoScale.FIT) }
+    var subtitleSize by remember { mutableStateOf(SubtitleSize.NORMAL) }
 
     LaunchedEffect(controlsTrigger, state.isPlaying) {
         controlsVisible = true
@@ -75,14 +81,21 @@ fun VodPlayerScreen(onBack: () -> Unit, viewModel: VodPlayerViewModel = hiltView
             controlsVisible = false
         }
     }
-    LaunchedEffect(Unit) {
+    // Au démarrage et à la fermeture du panneau : la racine reprend les touches.
+    LaunchedEffect(settingsOpen) {
+        if (settingsOpen) return@LaunchedEffect
         withFrameNanos { }
         rootFocus.tryRequestFocus()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.onAppStopped() }
-    BackHandler {
-        if (state.nextEpisode != null) viewModel.cancelNext() else onBack()
+    fun back() {
+        when {
+            settingsOpen -> settingsOpen = false
+            state.nextEpisode != null -> viewModel.cancelNext()
+            else -> onBack()
+        }
     }
+    BackHandler { back() }
 
     val overlayOpen = state.nextEpisode != null || state.playbackFailed
 
@@ -90,10 +103,17 @@ fun VodPlayerScreen(onBack: () -> Unit, viewModel: VodPlayerViewModel = hiltView
         Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // Retour intercepté avant les enfants : sinon, quand une ligne du panneau a le focus,
+            // Compose consomme le premier Retour pour « sortir » le focus et le panneau reste ouvert.
+            .onPreviewKeyEvent { e ->
+                if (e.key != Key.Back) return@onPreviewKeyEvent false
+                if (e.type == KeyEventType.KeyUp) back()
+                true
+            }
             .focusRequester(rootFocus)
             .focusable()
             .onKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown || overlayOpen) return@onKeyEvent false
+                if (e.type != KeyEventType.KeyDown || overlayOpen || settingsOpen) return@onKeyEvent false
                 controlsTrigger++
                 when (e.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause, Key.Spacebar -> { viewModel.togglePlayPause(); true }
@@ -101,19 +121,21 @@ fun VodPlayerScreen(onBack: () -> Unit, viewModel: VodPlayerViewModel = hiltView
                     Key.MediaPause -> { if (state.isPlaying) viewModel.togglePlayPause(); true }
                     Key.DirectionLeft, Key.MediaRewind -> { viewModel.seekBy(-10_000); true }
                     Key.DirectionRight, Key.MediaFastForward -> { viewModel.seekBy(30_000); true }
-                    Key.DirectionUp, Key.DirectionDown -> true
+                    Key.DirectionDown, Key.Menu -> { settingsOpen = true; true }
+                    Key.DirectionUp -> true
                     else -> false
                 }
             },
     ) {
-        VideoSurface(viewModel.player, Modifier.fillMaxSize())
+        VideoSurface(viewModel.player, Modifier.fillMaxSize(), scale = scale)
+        Subtitles(viewModel.player, subtitleSize, Modifier.align(Alignment.BottomCenter))
 
         if (state.isBuffering && !state.playbackFailed) {
             Text("Chargement…", style = MaterialTheme.typography.titleMedium, modifier = Modifier.align(Alignment.Center))
         }
 
         AnimatedVisibility(
-            visible = (controlsVisible || state.seekPreviewMs != null) && !overlayOpen,
+            visible = (controlsVisible || state.seekPreviewMs != null) && !overlayOpen && !settingsOpen,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
@@ -125,6 +147,17 @@ fun VodPlayerScreen(onBack: () -> Unit, viewModel: VodPlayerViewModel = hiltView
                 positionMs = state.seekPreviewMs ?: state.positionMs,
                 durationMs = state.durationMs,
                 seeking = state.seekPreviewMs != null,
+            )
+        }
+
+        if (settingsOpen && !overlayOpen) {
+            PlayerSettingsPanel(
+                player = viewModel.player,
+                scale = scale,
+                onScale = { scale = it },
+                subtitleSize = subtitleSize,
+                onSubtitleSize = { subtitleSize = it },
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
 
@@ -191,7 +224,7 @@ private fun Controls(
             }
             ProgramProgress(if (durationMs > 0) positionMs.toFloat() / durationMs else 0f)
             Text(
-                "OK : pause / lecture   ·   ◀ -10 s   ·   ▶ +30 s   ·   Retour : quitter",
+                "OK : pause / lecture   ·   ◀ -10 s   ·   ▶ +30 s   ·   ▼ audio, sous-titres   ·   Retour : quitter",
                 style = MaterialTheme.typography.labelMedium,
                 color = MyTvColors.OnSurfaceMuted,
             )

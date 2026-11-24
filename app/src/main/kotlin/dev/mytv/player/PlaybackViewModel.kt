@@ -206,6 +206,11 @@ class PlaybackViewModel @Inject constructor(
         switchTo(target, debounceMs = ZAP_DEBOUNCE_MS)
     }
 
+    /** Liste de zapping : lance [channel] (déjà dans la liste courante) sans attendre. */
+    fun zapTo(channel: Channel) {
+        if (channel.streamId != _state.value.channel?.streamId) switchTo(channel, debounceMs = 0)
+    }
+
     // ---------------------------------------------------------------- Sélecteur de chaînes
 
     /** Catégories proposées dans le sélecteur du lecteur (Gauche / OK). */
