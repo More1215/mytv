@@ -48,6 +48,8 @@ fun AddPortalScreen(
     onRestore: () -> Unit,
     /** Saisie depuis le téléphone (QR code) : bien plus rapide qu'au clavier de la télécommande. */
     onPhone: () -> Unit,
+    /** Box neuve : la personne qui aide peut tout faire à distance avec le code. */
+    onRemoteHelp: () -> Unit,
     viewModel: AddPortalViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -66,6 +68,7 @@ fun AddPortalScreen(
         onSave = viewModel::save,
         onRestore = onRestore,
         onPhone = onPhone,
+        onRemoteHelp = onRemoteHelp,
     )
 }
 
@@ -80,6 +83,7 @@ private fun AddPortalContent(
     onSave: () -> Unit,
     onRestore: () -> Unit,
     onPhone: () -> Unit,
+    onRemoteHelp: () -> Unit,
 ) {
     val phoneFocus = remember { FocusRequester() }
     val urlFocus = remember { FocusRequester() }
@@ -117,6 +121,8 @@ private fun AddPortalContent(
             Button(onClick = onPhone, modifier = Modifier.focusRequester(phoneFocus)) { Text(stringResource(R.string.action_phone_entry)) }
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onRestore) { Text(stringResource(R.string.action_restore_backup)) }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(onClick = onRemoteHelp) { Text("🛟 Aide à distance (code d'accès)") }
             Spacer(Modifier.height(20.dp))
             StatusPanel(state.phase)
         }

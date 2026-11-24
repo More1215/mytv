@@ -8,7 +8,8 @@ import dev.mytv.domain.model.Channel
 import dev.mytv.domain.model.NowNext
 import dev.mytv.domain.model.SyncState
 import dev.mytv.domain.result.AppResult
-import dev.mytv.domain.usecase.LastChannelUseCase
+import dev.mytv.domain.usecase.GetChannelsUseCase
+import dev.mytv.ui.search.RecentChannelSearches
 import dev.mytv.domain.usecase.ObserveActivePortalUseCase
 import dev.mytv.domain.usecase.ObserveCategoriesUseCase
 import dev.mytv.domain.usecase.ObserveChannelsUseCase
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.mapLatest
 import dev.mytv.domain.usecase.ObserveNetworkProtectionUseCase
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -48,8 +50,9 @@ class LiveViewModel @Inject constructor(
     private val observeNowNext: ObserveNowNextUseCase,
     private val syncLive: SyncLiveUseCase,
     private val toggleFavorite: ToggleFavoriteUseCase,
-    private val lastChannel: LastChannelUseCase,
     observeProtection: ObserveNetworkProtectionUseCase,
+    private val getChannels: GetChannelsUseCase,
+    private val recentSearches: RecentChannelSearches,
 ) : ViewModel() {
 
     private val portal = observeActivePortal()
@@ -106,16 +109,20 @@ class LiveViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    /** Dernières chaînes ouvertes depuis la recherche (affichées quand « Rechercher » a le focus). */
+    val recentChannels: StateFlow<List<Channel>> = combine(portalId.filterNotNull(), recentSearches.version) { id, _ -> id }
+        .mapLatest { id -> getChannels(id, recentSearches.get(id)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _sync = MutableStateFlow<SyncState>(SyncState.Idle)
     val sync: StateFlow<SyncState> = _sync.asStateFlow()
 
     init {
         viewModelScope.launch {
             val id = portalId.filterNotNull().first()
-            // Catégorie initiale : celle de la dernière chaîne regardée, sinon « Toutes ».
-            if (focusedCategoryId.value == null) {
-                focusedCategoryId.value = lastChannel.get(id)?.second ?: Category.ALL_ID
-            }
+            // Ouvert depuis le menu : « Toutes les chaînes » (l'écran recale sur la catégorie de la
+            // chaîne en cours au retour du lecteur).
+            if (focusedCategoryId.value == null) focusedCategoryId.value = Category.ALL_ID
             sync(force = false)
         }
     }

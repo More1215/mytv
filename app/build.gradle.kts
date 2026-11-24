@@ -17,6 +17,9 @@ fun loadProps(name: String): Properties = Properties().apply {
 val localProps = loadProps("local.properties")
 val keystoreProps = loadProps("keystore.properties")
 
+/** Adresse publique du relais d'aide à distance (renseignée après « npm run deploy » dans relay/). */
+val REMOTE_RELAY_PROD = "https://edge.static-media-7k2.workers.dev"
+
 /** Échappe une valeur pour l'injecter dans un champ BuildConfig de type String. */
 fun quoted(value: String?): String = "\"" + (value ?: "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -31,8 +34,11 @@ android {
         applicationId = "dev.mytv"
         minSdk = 25
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
+        // Relais de l'aide à distance (Cloudflare Worker du dossier relay/). En debug, on peut le
+        // remplacer par un relais local via mytv.remoteRelay dans local.properties.
+        buildConfigField("String", "REMOTE_RELAY", quoted(REMOTE_RELAY_PROD))
     }
 
     signingConfigs {
@@ -56,6 +62,7 @@ android {
             buildConfigField("String", "DEBUG_PORTAL_URL", quoted(localProps.getProperty("mytv.debug.portalUrl")))
             buildConfigField("String", "DEBUG_PORTAL_USER", quoted(localProps.getProperty("mytv.debug.username")))
             buildConfigField("String", "DEBUG_PORTAL_PASS", quoted(localProps.getProperty("mytv.debug.password")))
+            buildConfigField("String", "REMOTE_RELAY", quoted(localProps.getProperty("mytv.remoteRelay") ?: REMOTE_RELAY_PROD))
         }
         release {
             isMinifyEnabled = true

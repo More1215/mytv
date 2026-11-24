@@ -41,13 +41,8 @@ import com.google.zxing.common.BitMatrix
 import com.google.zxing.qrcode.QRCodeWriter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.mytv.domain.model.PortalCredentials
-import dev.mytv.domain.result.AppResult
-import dev.mytv.domain.usecase.AddPortalUseCase
-import dev.mytv.domain.util.PortalLinkParser
 import dev.mytv.lan.MiniHttpServer
 import dev.mytv.lan.PortalWebServer
-import dev.mytv.ui.common.toMessage
 import dev.mytv.ui.common.tryRequestFocus
 import dev.mytv.ui.theme.MyTvColors
 import kotlinx.coroutines.delay
@@ -73,7 +68,7 @@ data class PhonePortalUiState(
  */
 @HiltViewModel
 class PhonePortalViewModel @Inject constructor(
-    private val addPortal: AddPortalUseCase,
+    private val submitter: PortalFormSubmitter,
     @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -81,7 +76,6 @@ class PhonePortalViewModel @Inject constructor(
     val state: StateFlow<PhonePortalUiState> = _state.asStateFlow()
 
     private var server: PortalWebServer? = null
-
     fun start() {
         if (server != null) return
         val s = PortalWebServer(onSubmit = ::submit, onEvent = { text -> _state.update { it.copy(status = text, statusIsError = true) } })
@@ -103,30 +97,10 @@ class PhonePortalViewModel @Inject constructor(
 
     private fun submit(form: Map<String, String>): Pair<Boolean, String> {
         _state.value.savedName?.let { return true to "Le portail « $it » est déjà ajouté." }
-        val paste = form["paste"].orEmpty()
-        val name: String
-        val credentials: PortalCredentials
-        if (paste.isNotBlank()) {
-            credentials = PortalLinkParser.parse(paste) ?: return false to
-                "Je n'ai trouvé ni lien ni identifiants dans ce texte.\n" +
-                "Il doit contenir l'adresse du serveur, le nom d'utilisateur et le mot de passe."
-            name = ""
-        } else {
-            credentials = PortalCredentials(form["url"].orEmpty(), form["user"].orEmpty(), form["pass"].orEmpty())
-            name = form["name"].orEmpty()
-        }
         _state.update { it.copy(status = "Connexion au portail…", statusIsError = false) }
-        return when (val r = runBlocking { addPortal(name, credentials) }) {
-            is AppResult.Success -> {
-                _state.update { it.copy(status = "Portail ajouté ✓", statusIsError = false, savedName = r.value.name) }
-                true to "Portail « ${r.value.name} » ajouté ✓\nLa TV ouvre l'accueil, tu peux poser ton téléphone."
-            }
-            is AppResult.Failure -> {
-                val message = r.error.toMessage(context.resources)
-                _state.update { it.copy(status = message, statusIsError = true) }
-                false to message
-            }
-        }
+        val outcome = runBlocking { submitter.submit(form) }
+        _state.update { it.copy(status = outcome.message, statusIsError = !outcome.ok, savedName = outcome.savedName) }
+        return outcome.ok to if (outcome.ok) "${outcome.message}\nLa TV ouvre l'accueil, tu peux poser ton téléphone." else outcome.message
     }
 
     override fun onCleared() = stop()
@@ -165,30 +139,18 @@ fun PhonePortalScreen(
         horizontalArrangement = Arrangement.spacedBy(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Ajouter depuis ton téléphone", style = MaterialTheme.typography.displaySmall)
-            Spacer(Modifier.height(6.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Ajouter depuis un téléphone", style = MaterialTheme.typography.headlineMedium)
+            Text("Sur le même Wi-Fi que la TV", style = MaterialTheme.typography.titleMedium, color = MyTvColors.Accent)
             if (state.error != null) {
-                Text(state.error!!, color = MyTvColors.Error, style = MaterialTheme.typography.titleMedium)
+                Text(state.error!!, color = MyTvColors.Error, style = MaterialTheme.typography.bodyLarge)
             } else {
-                Text("1. Connecte ton téléphone au même Wi-Fi que la TV.", style = MaterialTheme.typography.bodyLarge)
-                Text("2. Scanne le QR code avec l'appareil photo.", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "3. Colle le lien ou le message de ton fournisseur (ou remplis les champs), puis « Envoyer à la TV ».",
+                    "Scanne le QR code avec le téléphone, puis colle le lien ou le message du fournisseur. Sans QR code : ${state.address ?: "…"}",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                Spacer(Modifier.height(6.dp))
-                Text("Pas de QR code ? Tape cette adresse dans le navigateur du téléphone :", color = MyTvColors.OnSurfaceMuted)
                 Text(
-                    state.address ?: "…",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MyTvColors.Accent,
-                    modifier = Modifier
-                        .background(MyTvColors.Surface, RoundedCornerShape(10.dp))
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                )
-                Text(
-                    "La page charge sans fin ? Le téléphone n'atteint pas la TV : vérifie qu'il est sur le même Wi-Fi (pas un Wi-Fi « invité »), puis coupe ses données mobiles et son VPN.",
+                    "La page charge sans fin ? Le téléphone doit être sur ce Wi-Fi (pas un Wi-Fi « invité »), sans données mobiles ni VPN.",
                     color = MyTvColors.OnSurfaceMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -200,7 +162,7 @@ fun PhonePortalScreen(
                     color = if (state.statusIsError) MyTvColors.Error else MyTvColors.Success,
                 )
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             OutlinedButton(onClick = onCancel, modifier = Modifier.focusRequester(cancelFocus)) { Text("Annuler") }
         }
         state.address?.let { QrCode(it, Modifier.size(300.dp)) }

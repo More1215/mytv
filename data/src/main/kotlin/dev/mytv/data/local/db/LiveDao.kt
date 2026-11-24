@@ -29,6 +29,18 @@ interface LiveDao {
     @Query("$SELECT_CHANNEL WHERE c.portalId = :portalId AND f.streamId IS NOT NULL ORDER BY f.addedAtMs")
     fun observeFavoriteChannels(portalId: Long): Flow<List<ChannelWithFavorite>>
 
+    /**
+     * Recherche par nom (insensible à la casse) ou par numéro. Les chaînes dont le nom COMMENCE par
+     * le texte passent devant. Quelques milliers de lignes au plus : instantané même sur petite box.
+     */
+    @Query(
+        """$SELECT_CHANNEL WHERE c.portalId = :portalId
+        AND (c.name LIKE '%' || :query || '%' OR c.number = :number)
+        ORDER BY CASE WHEN c.number = :number THEN 0 WHEN c.name LIKE :query || '%' THEN 1 ELSE 2 END, c.sortOrder
+        LIMIT :limit""",
+    )
+    suspend fun searchChannels(portalId: Long, query: String, number: Int, limit: Int): List<ChannelWithFavorite>
+
     @Query("$SELECT_CHANNEL WHERE c.portalId = :portalId AND c.streamId = :streamId")
     suspend fun getChannel(portalId: Long, streamId: Long): ChannelWithFavorite?
 

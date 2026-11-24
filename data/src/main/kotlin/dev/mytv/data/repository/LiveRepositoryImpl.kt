@@ -67,6 +67,13 @@ class LiveRepositoryImpl @Inject constructor(
         return source.map { list -> list.map { it.toDomain() } }.flowOn(io)
     }
 
+    override suspend fun searchChannels(portalId: Long, query: String, limit: Int): List<Channel> = withContext(io) {
+        // % et _ sont des jokers pour LIKE : retirés pour chercher le texte tel quel.
+        val q = query.trim().replace("%", "").replace("_", "")
+        if (q.isEmpty()) return@withContext emptyList()
+        liveDao.searchChannels(portalId, q, q.toIntOrNull() ?: -1, limit).map { it.toDomain() }
+    }
+
     override suspend fun getChannel(portalId: Long, streamId: Long): Channel? =
         withContext(io) { liveDao.getChannel(portalId, streamId)?.toDomain() }
 

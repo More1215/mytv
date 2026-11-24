@@ -54,6 +54,9 @@ import dev.mytv.ui.settings.PlayerSettingsScreen
 import dev.mytv.ui.settings.PrivacySettingsScreen
 import dev.mytv.ui.settings.PortalsScreen
 import dev.mytv.ui.settings.SettingsScreen
+import dev.mytv.ui.settings.SupportScreen
+import dev.mytv.remote.RemoteControl
+import dev.mytv.ui.support.RemoteAccessScreen
 import dev.mytv.ui.settings.SettingsSection
 import dev.mytv.ui.theme.MyTvColors
 import dev.mytv.ui.vod.MovieDetailsScreen
@@ -77,12 +80,16 @@ private object Routes {
     const val VOD_BROWSE = "vod/{kind}"
     const val MOVIE = "movie/{id}"
     const val SERIES = "series/{id}"
-    const val SEARCH = "search"
+    const val SEARCH = "search?channels={channels}"
+    const val SEARCH_ALL = "search?channels=false"
+    const val SEARCH_CHANNELS = "search?channels=true"
     const val SETTINGS = "settings"
     const val SETTINGS_PORTALS = "settings/portals"
     const val SETTINGS_PLAYER = "settings/player"
     const val SETTINGS_BACKUP = "settings/backup"
     const val SETTINGS_PRIVACY = "settings/privacy"
+    const val SETTINGS_SUPPORT = "settings/support"
+    const val SETTINGS_REMOTE = "settings/support/remote"
     val VOD_PLAYER = "vodplayer?" + listOf(
         VodPlayerViewModel.ARG_KEY, VodPlayerViewModel.ARG_EXT, VodPlayerViewModel.ARG_TITLE,
         VodPlayerViewModel.ARG_SUBTITLE, VodPlayerViewModel.ARG_IMAGE, VodPlayerViewModel.ARG_SERIES,
@@ -136,7 +143,7 @@ class StartViewModel @Inject constructor(
 }
 
 @Composable
-fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
+fun MyTvNavHost(remote: RemoteControl, startViewModel: StartViewModel = hiltViewModel()) {
     val startRoute by startViewModel.startRoute.collectAsStateWithLifecycle()
     val route = startRoute
     if (route == null) {
@@ -163,6 +170,11 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     val onLiveScreen = currentRoute in Routes.LIVE_ROUTES
+
+    // Touche « Accueil » de l'aide à distance : retour à l'accueil MyTV (sans quitter l'appli).
+    LaunchedEffect(Unit) {
+        remote.navigation.collect { if (it == RemoteControl.Navigation.HOME) navController.popBackStack(Routes.HOME, inclusive = false) }
+    }
 
     // Le direct ne joue que sur les écrans Live (aperçu, plein écran, guide) : en allant à
     // l'accueil ou dans les films, il est coupé (son et réseau) et repris au retour.
@@ -191,6 +203,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                 onPortalSaved = { navController.restartAt(Routes.HOME) },
                 onRestore = { navController.navigate(Routes.SETTINGS_BACKUP) },
                 onPhone = { navController.navigate(Routes.PHONE_PORTAL) },
+                onRemoteHelp = { navController.navigate(Routes.SETTINGS_REMOTE) },
             )
         }
         composable(Routes.PHONE_PORTAL) {
@@ -216,7 +229,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                             HomeSection.LIVE -> Routes.LIVE
                             HomeSection.MOVIES -> Routes.vodBrowse(VodKind.MOVIES)
                             HomeSection.SERIES -> Routes.vodBrowse(VodKind.SERIES)
-                            HomeSection.SEARCH -> Routes.SEARCH
+                            HomeSection.SEARCH -> Routes.SEARCH_ALL
                         },
                     )
                 },
@@ -237,6 +250,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                 onOpenPlayer = { navController.navigate(Routes.PLAYER) { launchSingleTop = true } },
                 onOpenGuide = { navController.navigate(Routes.guide(it)) },
                 onChangePortal = { navController.navigate(Routes.SETTINGS) },
+                onSearch = { navController.navigate(Routes.SEARCH_CHANNELS) },
             )
         }
         composable(Routes.PLAYER) {
@@ -261,7 +275,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
         composable(Routes.VOD_BROWSE, arguments = listOf(navArgument("kind") { type = NavType.StringType })) {
             VodBrowseScreen(
                 onOpen = { kind, id -> navController.navigate(Routes.details(kind, id)) },
-                onSearch = { navController.navigate(Routes.SEARCH) },
+                onSearch = { navController.navigate(Routes.SEARCH_ALL) },
             )
         }
         composable(Routes.MOVIE, arguments = listOf(navArgument("id") { type = NavType.StringType })) {
@@ -279,6 +293,7 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                         SettingsSection.PLAYER -> Routes.SETTINGS_PLAYER
                         SettingsSection.BACKUP -> Routes.SETTINGS_BACKUP
                         SettingsSection.PRIVACY -> Routes.SETTINGS_PRIVACY
+                        SettingsSection.SUPPORT -> Routes.SETTINGS_SUPPORT
                     },
                 )
             })
@@ -293,6 +308,8 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
         }
         composable(Routes.SETTINGS_PLAYER) { PlayerSettingsScreen() }
         composable(Routes.SETTINGS_PRIVACY) { PrivacySettingsScreen() }
+        composable(Routes.SETTINGS_SUPPORT) { SupportScreen(onAccessCode = { navController.navigate(Routes.SETTINGS_REMOTE) }) }
+        composable(Routes.SETTINGS_REMOTE) { RemoteAccessScreen(onClose = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_BACKUP) {
             // Après une restauration, l'accueil est recréé pour relire portails, favoris et reprises ;
             // sinon simple retour (ex. installation neuve : on revient au formulaire de portail).
@@ -300,8 +317,16 @@ fun MyTvNavHost(startViewModel: StartViewModel = hiltViewModel()) {
                 if (restored) navController.restartAt(Routes.HOME) else navController.popBackStack()
             })
         }
-        composable(Routes.SEARCH) {
-            SearchScreen(onOpen = { kind, id -> navController.navigate(Routes.details(kind, id)) })
+        composable(Routes.SEARCH, arguments = listOf(navArgument("channels") { type = NavType.BoolType; defaultValue = false })) {
+            SearchScreen(
+                onOpen = { kind, id -> navController.navigate(Routes.details(kind, id)) },
+                onPlayChannel = { channel ->
+                    // Comme depuis l'accueil : Retour ramène à la liste des chaînes.
+                    navController.navigate(Routes.LIVE)
+                    navController.navigate(Routes.PLAYER)
+                    playback.play(channel, channel.categoryId ?: Category.ALL_ID)
+                },
+            )
         }
         composable(
             Routes.VOD_PLAYER,

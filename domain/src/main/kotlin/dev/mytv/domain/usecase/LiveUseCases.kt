@@ -10,6 +10,16 @@ import dev.mytv.domain.result.AppResult
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
+class SearchChannelsUseCase @Inject constructor(private val repo: LiveRepository) {
+    suspend operator fun invoke(portalId: Long, query: String): List<Channel> = repo.searchChannels(portalId, query, limit = 40)
+}
+
+/** Chaînes par identifiant, dans l'ordre donné (celles qui n'existent plus sont ignorées). */
+class GetChannelsUseCase @Inject constructor(private val repo: LiveRepository) {
+    suspend operator fun invoke(portalId: Long, streamIds: List<Long>): List<Channel> =
+        streamIds.mapNotNull { repo.getChannel(portalId, it) }
+}
+
 class ObserveCategoriesUseCase @Inject constructor(private val repo: LiveRepository) {
     operator fun invoke(portalId: Long): Flow<List<Category>> = repo.observeCategories(portalId)
 }

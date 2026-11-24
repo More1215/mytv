@@ -3,6 +3,8 @@ package dev.mytv.ui.settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,7 +47,7 @@ import dev.mytv.ui.components.SingleLineText
 import dev.mytv.ui.theme.MyTvColors
 import dev.mytv.update.UpdateState
 
-enum class SettingsSection { PORTALS, PLAYER, PRIVACY, BACKUP }
+enum class SettingsSection { PORTALS, PLAYER, PRIVACY, BACKUP, SUPPORT }
 
 // ======================================================================= Hub
 
@@ -77,6 +79,24 @@ fun SettingsScreen(onSection: (SettingsSection) -> Unit, updates: UpdateSettings
             },
             onClick = updates::onClick,
         )
+        SettingsRow("Support", "Aide à distance : code d'accès pour être dépanné depuis un ordinateur", { onSection(SettingsSection.SUPPORT) })
+    }
+}
+
+// ======================================================================= Support
+
+@Composable
+fun SupportScreen(onAccessCode: () -> Unit) {
+    val first = remember { FocusRequester() }
+    LaunchedEffect(Unit) { first.tryRequestFocus() }
+    Page("Support") {
+        SettingsRow(
+            title = "Code d'accès",
+            subtitle = "Affiche un code : la personne qui t'aide voit ton écran et pilote MyTV depuis son ordinateur, même sans être chez toi",
+            onClick = onAccessCode,
+            modifier = Modifier.focusRequester(first),
+        )
+        Text("MyTV version ${dev.mytv.BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = MyTvColors.OnSurfaceMuted)
     }
 }
 
@@ -105,7 +125,7 @@ fun PortalsScreen(
     BackHandler(enabled = state.confirmDelete != null) { viewModel.cancelDelete() }
 
     Box {
-        Page("Portails") {
+        Page("Portails", scrollable = false) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f, fill = false)) {
                 items(state.portals, key = { it.id }) { portal ->
                     val active = portal.id == state.activeId
@@ -237,11 +257,13 @@ fun PrivacySettingsScreen(viewModel: PrivacySettingsViewModel = hiltViewModel())
 // ======================================================================= Commun
 
 @Composable
-internal fun Page(title: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+internal fun Page(title: String, scrollable: Boolean = true, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
             .background(MyTvColors.Background)
+            // Défile quand le focus descend sous le bas de l'écran (ex. ligne Support).
+            .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(horizontal = 48.dp, vertical = 27.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

@@ -1,5 +1,6 @@
 package dev.mytv.ui.home
 
+import dev.mytv.BuildConfig
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -111,6 +112,7 @@ fun HomeScreen(
         action()
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -211,6 +213,14 @@ fun HomeScreen(
                 color = MyTvColors.OnSurfaceMuted,
             )
         }
+    }
+    // Version installée, discrète en bas à droite (utile au support).
+    Text(
+        "v${BuildConfig.VERSION_NAME}",
+        style = MaterialTheme.typography.labelMedium,
+        color = MyTvColors.OnSurfaceMuted,
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 12.dp),
+    )
     }
 }
 

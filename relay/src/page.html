@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyTV – Contrôle à distance</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0f14;--card:#151b23;--line:#2a3441;--acc:#2f80ed;--txt:#f2f5f8;--mut:#9aa7b4;--ok:#3ecf8e;--ko:#ff6b6b}
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--txt);margin:0;padding:16px}
+h1{font-size:22px;margin:0 0 4px}
+p.small{color:var(--mut);font-size:14px;margin:4px 0}
+.card{background:var(--card);border-radius:12px;padding:14px 16px;margin:12px 0}
+input,button{font-size:16px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--txt)}
+button{background:#1f2935;cursor:pointer;font-weight:600}
+button:hover{border-color:var(--acc)}button:active{background:var(--acc)}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+#login{max-width:520px;margin:40px auto}
+#code{width:100%;font-size:26px;letter-spacing:3px;text-transform:uppercase;text-align:center;font-family:ui-monospace,monospace;margin:8px 0}
+#login button{width:100%}
+.msg{white-space:pre-line;font-weight:600;margin:8px 0;min-height:1.2em}.ok{color:var(--ok)}.ko{color:var(--ko)}
+#app{display:none;gap:16px;align-items:flex-start;flex-wrap:wrap}
+#screenBox{flex:1 1 640px;min-width:0}
+#screen{width:100%;aspect-ratio:16/9;background:#000;border-radius:10px;border:1px solid var(--line);display:block;object-fit:contain}
+#bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;color:var(--mut);font-size:14px}
+#remote{flex:0 0 280px}
+.pad{display:grid;grid-template-columns:repeat(3,72px);grid-template-rows:repeat(3,60px);gap:6px;justify-content:center;margin:6px 0 10px}
+.pad button{font-size:22px;padding:0}
+.pad .ok{grid-column:2;grid-row:2;background:var(--acc);color:#fff;border-color:var(--acc)}
+.row{display:flex;gap:6px;margin:6px 0}.row button{flex:1;padding:10px 4px}
+.digits{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:6px 0}
+.digits button{padding:10px 0}
+#text{width:100%;margin:6px 0}
+kbd{background:#1f2935;border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ko);margin-right:6px}.dot.on{background:var(--ok)}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h1>MyTV – Contrôle à distance</h1>
+  <p class="small">Sur la TV du client : <b>Réglages → Support → Code d'accès</b> (ou « Aide à distance » sur l'écran d'ajout de portail). Il te donne le code affiché.</p>
+  <div class="card">
+    <input id="code" autofocus autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC-DEF-GHJK" maxlength="14">
+    <button id="go" class="primary">Prendre la main</button>
+    <p id="cmsg" class="msg"></p>
+  </div>
+  <p class="small">Tout est chiffré de bout en bout avec le code : le relais ne transporte que des données illisibles et ne garde rien.</p>
+</div>
+
+<div id="app">
+  <div id="screenBox">
+    <img id="screen" alt="Écran de la TV">
+    <div id="bar">
+      <span><span id="dot" class="dot"></span><span id="state">Connexion…</span></span>
+      <span>Clavier : flèches, <kbd>Entrée</kbd> OK, <kbd>Échap</kbd> retour, chiffres</span>
+    </div>
+    <p id="info" class="msg"></p>
+  </div>
+
+  <div id="remote" class="card">
+    <div class="pad">
+      <button data-k="UP" style="grid-column:2;grid-row:1">▲</button>
+      <button data-k="LEFT" style="grid-column:1;grid-row:2">◀</button>
+      <button data-k="OK" class="ok">OK</button>
+      <button data-k="RIGHT" style="grid-column:3;grid-row:2">▶</button>
+      <button data-k="DOWN" style="grid-column:2;grid-row:3">▼</button>
+    </div>
+    <div class="row"><button data-k="BACK">↩ Retour</button><button data-k="HOME">⌂ Accueil</button></div>
+    <div class="row"><button data-k="OK_LONG" title="Appui long sur OK (favori…)">OK long</button><button data-k="MENU">☰ Menu</button></div>
+    <div class="row"><button data-k="CH_UP">CH +</button><button data-k="PLAY_PAUSE">⏯</button><button data-k="CH_DOWN">CH −</button></div>
+    <div class="digits">
+      <button data-k="D1">1</button><button data-k="D2">2</button><button data-k="D3">3</button><button data-k="D4">4</button><button data-k="D5">5</button>
+      <button data-k="D6">6</button><button data-k="D7">7</button><button data-k="D8">8</button><button data-k="D9">9</button><button data-k="D0">0</button>
+    </div>
+    <p class="small" style="margin-top:12px">Texte (adresse, identifiant, mot de passe…) : sélectionne le champ sur la TV, puis :</p>
+    <input id="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Texte à mettre dans le champ">
+    <div class="row"><button id="sendText" class="primary">Remplir le champ</button></div>
+    <div class="row"><button id="quit">Terminer</button></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+const enc = new TextEncoder(), dec = new TextDecoder();
+const $ = id => document.getElementById(id);
+const T_JSON = 1, T_JPEG = 2;
+let s = null; // session : {ws, key, room, closed}
+let lastUrl = null;
+
+function say(el, text, ok) { el.textContent = text; el.className = 'msg' + (ok === undefined ? '' : ok ? ' ok' : ' ko'); }
+
+// Mêmes calculs que la TV (RemoteControl.kt) : salle = SHA-256, clé = PBKDF2-SHA1 → AES-GCM.
+async function roomOf(code) {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode('mytv:room:' + code)));
+  return [...d.slice(0, 16)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function keyOf(code) {
+  const base = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name: 'PBKDF2', hash: 'SHA-1', salt: enc.encode('mytv-remote-v1'), iterations: 20000},
+    base, {name: 'AES-GCM', length: 256}, false, ['encrypt', 'decrypt']);
+}
+async function sendJson(obj) {
+  if (!s || s.ws.readyState !== 1) return;
+  const body = enc.encode(JSON.stringify(obj));
+  const plain = new Uint8Array(1 + body.length); plain[0] = T_JSON; plain.set(body, 1);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({name: 'AES-GCM', iv}, s.key, plain));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  s.ws.send(out);
+}
+async function onBinary(buf) {
+  const data = new Uint8Array(buf);
+  let plain;
+  try { plain = new Uint8Array(await crypto.subtle.decrypt({name: 'AES-GCM', iv: data.slice(0, 12)}, s.key, data.slice(12))); }
+  catch (_) { return; } // message illisible : ignoré
+  if (plain[0] === T_JPEG) {
+    const url = URL.createObjectURL(new Blob([plain.subarray(1)], {type: 'image/jpeg'}));
+    $('screen').src = url;
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl = url;
+  } else if (plain[0] === T_JSON) {
+    const m = JSON.parse(dec.decode(plain.subarray(1)));
+    if (m.t === 'hello') setState(true, `Connecté à la TV (MyTV ${m.version})`);
+    else if (m.t === 'info') say($('info'), m.msg, m.ok);
+    else if (m.t === 'bye') { setState(false, 'Le client a arrêté l\'accès à distance.'); stop(false); }
+  }
+}
+function setState(on, text) { $('dot').className = 'dot' + (on ? ' on' : ''); $('state').textContent = text; }
+
+function open(sess) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws?room=${sess.room}&role=pc`);
+  ws.binaryType = 'arraybuffer';
+  sess.ws = ws;
+  ws.onmessage = e => {
+    if (typeof e.data === 'string') {
+      const m = JSON.parse(e.data);
+      if (m.relay === 'peer') {
+        if (m.up) { setState(false, 'TV trouvée, connexion…'); sendJson({t: 'hello'}); }
+        else setState(false, 'La TV n\'est pas connectée (accès arrêté sur la TV, ou appli fermée).');
+      }
+    } else onBinary(e.data);
+  };
+  ws.onclose = () => {
+    if (sess.closed) return;
+    setState(false, 'Connexion perdue, nouvel essai…');
+    setTimeout(() => { if (!sess.closed) open(sess); }, 2000);
+  };
+}
+
+async function connect() {
+  const code = $('code').value.toUpperCase().split('').filter(c => ALPHABET.includes(c)).join('');
+  if (code.length !== 10) { say($('cmsg'), 'Le code fait 10 caractères (ex. ABC-DEF-GHJK).', false); return; }
+  $('go').disabled = true;
+  say($('cmsg'), 'Connexion…');
+  s = {key: await keyOf(code), room: await roomOf(code), closed: false};
+  $('login').style.display = 'none';
+  $('app').style.display = 'flex';
+  setState(false, 'Recherche de la TV…');
+  open(s);
+  $('go').disabled = false;
+}
+function stop(sendBye) {
+  if (!s) return;
+  if (sendBye) sendJson({t: 'bye'});
+  s.closed = true;
+  setTimeout(() => s && s.ws.close(), 200);
+}
+
+const KEYS = {ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT', Enter: 'OK', Escape: 'BACK', Backspace: 'BACK',
+  PageUp: 'CH_UP', PageDown: 'CH_DOWN', ' ': 'PLAY_PAUSE', Home: 'HOME'};
+for (let i = 0; i <= 9; i++) KEYS[String(i)] = 'D' + i;
+document.addEventListener('keydown', e => {
+  if (!s || s.closed || e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = KEYS[e.key];
+  if (k) { e.preventDefault(); sendJson({t: 'key', k}); }
+});
+document.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => sendJson({t: 'key', k: b.dataset.k}));
+$('go').onclick = connect;
+$('code').onkeydown = e => { if (e.key === 'Enter') connect(); };
+$('sendText').onclick = () => { sendJson({t: 'text', s: $('text').value}); };
+$('text').onkeydown = e => { if (e.key === 'Enter') $('sendText').click(); };
+$('quit').onclick = () => { stop(true); location.reload(); };
+</script>
+</body>
+</html>

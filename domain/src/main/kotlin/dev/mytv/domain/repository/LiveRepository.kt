@@ -20,6 +20,9 @@ interface LiveRepository {
 
     suspend fun getChannel(portalId: Long, streamId: Long): Channel?
 
+    /** Chaînes dont le nom contient [query] (ou dont le numéro vaut [query]). */
+    suspend fun searchChannels(portalId: Long, query: String, limit: Int): List<Channel>
+
     /** true si aucun catalogue n'est en cache ou s'il est plus vieux que [maxAgeMs]. */
     suspend fun isCatalogStale(portalId: Long, maxAgeMs: Long): Boolean
 

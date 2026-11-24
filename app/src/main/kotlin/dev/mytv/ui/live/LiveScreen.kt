@@ -24,11 +24,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
@@ -78,6 +80,7 @@ fun LiveScreen(
     onOpenPlayer: () -> Unit,
     onOpenGuide: (categoryId: String) -> Unit,
     onChangePortal: () -> Unit,
+    onSearch: () -> Unit,
     viewModel: LiveViewModel = hiltViewModel(),
 ) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
@@ -86,6 +89,7 @@ fun LiveScreen(
     val nowNext by viewModel.nowNext.collectAsStateWithLifecycle()
     val sync by viewModel.sync.collectAsStateWithLifecycle()
     val privacy by viewModel.privacy.collectAsStateWithLifecycle()
+    val recentChannels by viewModel.recentChannels.collectAsStateWithLifecycle()
     val playbackState by playback.state.collectAsStateWithLifecycle()
     val now = rememberNow()
 
@@ -96,13 +100,22 @@ fun LiveScreen(
     var targetChannelIndex by remember { mutableStateOf(-1) }
     var initialFocusDone by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    // « Dernières recherches » : affichées dès que « Rechercher » a le focus, et tant qu'on n'est
+    // pas revenu sur une catégorie (on peut donc aller à droite dans la liste et lancer une chaîne).
+    var showRecent by remember { mutableStateOf(false) }
+    var recentHasFocus by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
 
     val channels = channelList?.channels
     val playingId = playbackState.channel?.streamId
 
-    // En revenant du lecteur, la liste se cale sur la catégorie de la chaîne en cours (elle a pu
-    // être choisie dans le sélecteur du lecteur, dans une autre catégorie).
-    val playingCategory = remember { playback.state.value.takeIf { it.channel != null }?.categoryId }
+    // Ouvert depuis le menu : « Toutes les chaînes ». En revenant du lecteur, la liste se cale sur
+    // la catégorie de la chaîne en cours (elle a pu être choisie dans le sélecteur du lecteur).
+    var returning by rememberSaveable { mutableStateOf(false) }
+    val playingCategory = remember {
+        if (!returning) Category.ALL_ID else playback.state.value.takeIf { it.channel != null }?.categoryId
+    }
+    LaunchedEffect(Unit) { returning = true }
     LaunchedEffect(Unit) { playingCategory?.let(viewModel::onCategoryFocused) }
 
     // Focus initial (une fois par entrée sur l'écran) : chaîne en lecture, sinon première chaîne.
@@ -131,6 +144,7 @@ fun LiveScreen(
     }
 
     BackHandler(enabled = listHasFocus) { selectedCategoryFocus.tryRequestFocus() }
+    BackHandler(enabled = recentHasFocus) { searchFocus.tryRequestFocus() }
 
     Row(
         Modifier
@@ -147,6 +161,26 @@ fun LiveScreen(
             Spacer(Modifier.height(4.dp))
             PrivacyBadge(privacy.vpnActive, privacy.vpnRequired, privacy.portalEncrypted)
             Spacer(Modifier.height(10.dp))
+            // Recherche par nom ou numéro, dans toutes les catégories.
+            Surface(
+                onClick = onSearch,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(searchFocus)
+                    // Le focus « automatique » d'Android à l'arrivée sur l'écran ne compte pas.
+                    .onFocusChanged { if (it.isFocused && initialFocusDone) showRecent = true },
+                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = MyTvColors.Accent,
+                    contentColor = MyTvColors.OnSurfaceMuted,
+                    focusedContentColor = Color.White,
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            ) {
+                Text("🔍  Rechercher", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+            }
+            Spacer(Modifier.height(4.dp))
             LazyColumn(
                 modifier = Modifier.weight(1f).focusRestorer(),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -157,6 +191,7 @@ fun LiveScreen(
                         category = category,
                         selected = category.id == selectedCategoryId,
                         onFocused = {
+                            showRecent = false
                             // Au retour sur l'écran, Android donne d'office le focus au premier
                             // élément (Favoris) : ce focus « automatique » ne doit pas écraser la
                             // catégorie de la chaîne en cours tant que le focus initial n'est pas posé.
@@ -172,10 +207,10 @@ fun LiveScreen(
 
         // ------------------------------------------------------------ Chaînes
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            val categoryName = categories.firstOrNull { it.id == selectedCategoryId }?.name.orEmpty()
+            val categoryName = if (showRecent) "Dernières recherches" else categories.firstOrNull { it.id == selectedCategoryId }?.name.orEmpty()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(categoryName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                channels?.let {
+                channels?.takeIf { !showRecent }?.let {
                     Text(
                         if (it.size > 1) "${it.size} chaînes" else "${it.size} chaîne",
                         style = MaterialTheme.typography.labelMedium,
@@ -187,6 +222,31 @@ fun LiveScreen(
             Spacer(Modifier.height(8.dp))
 
             when {
+                showRecent && recentChannels.isEmpty() ->
+                    CenteredMessage("Aucune recherche récente.\nOK sur « Rechercher » pour trouver une chaîne par son nom ou son numéro.")
+                showRecent -> LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { recentHasFocus = it.hasFocus },
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    itemsIndexed(recentChannels, key = { _, c -> "r${c.streamId}" }) { _, channel ->
+                        ChannelRow(
+                            channel = channel,
+                            nowNext = channel.epgChannelId?.let { nowNext[it] } ?: NowNext.EMPTY,
+                            nowMs = now,
+                            isPlaying = channel.streamId == playingId,
+                            onFocused = { focusedChannel = channel },
+                            onClick = {
+                                playback.play(channel, channel.categoryId ?: Category.ALL_ID)
+                                onOpenPlayer()
+                            },
+                            onLongClick = { viewModel.toggleFavorite(channel) },
+                            modifier = Modifier.focusProperties { left = searchFocus },
+                        )
+                    }
+                }
                 channels == null || (channels.isEmpty() && sync == SyncState.Running) ->
                     CenteredMessage("Chargement des chaînes…")
                 channels.isEmpty() && selectedCategoryId == Category.FAVORITES_ID ->
@@ -213,7 +273,9 @@ fun LiveScreen(
                                 onOpenPlayer()
                             },
                             onLongClick = { viewModel.toggleFavorite(channel) },
-                            modifier = if (index == targetChannelIndex) Modifier.focusRequester(targetChannelFocus) else Modifier,
+                            // ◀ revient toujours sur la catégorie affichée, pas sur celle alignée à l'écran.
+                            modifier = (if (index == targetChannelIndex) Modifier.focusRequester(targetChannelFocus) else Modifier)
+                                .focusProperties { left = selectedCategoryFocus },
                         )
                     }
                 }

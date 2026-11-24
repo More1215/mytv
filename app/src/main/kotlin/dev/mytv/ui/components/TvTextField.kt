@@ -10,6 +10,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import dev.mytv.remote.RemoteTextInput
 import dev.mytv.ui.theme.MyTvColors
 
 /**
@@ -69,6 +72,15 @@ fun TvTextField(
     var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+
+    // Aide à distance : le champ qui a le focus peut être rempli depuis la page web.
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    DisposableEffect(focused) {
+        if (!focused) return@DisposableEffect onDispose { }
+        val sink: (String) -> Unit = { currentOnValueChange(it) }
+        RemoteTextInput.sink = sink
+        onDispose { if (RemoteTextInput.sink === sink) RemoteTextInput.sink = null }
+    }
 
     fun startEditing() {
         editing = true
