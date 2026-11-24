@@ -29,6 +29,7 @@ import dev.mytv.ui.common.tryRequestFocus
 import dev.mytv.ui.settings.Page
 import dev.mytv.ui.theme.MyTvColors
 import javax.inject.Inject
+import kotlinx.coroutines.flow.first
 
 @HiltViewModel
 class RemoteAccessViewModel @Inject constructor(val remote: RemoteControl) : ViewModel()
@@ -48,6 +49,9 @@ fun RemoteAccessScreen(onClose: () -> Unit, viewModel: RemoteAccessViewModel = h
     LaunchedEffect(Unit) {
         remote.start()
         stopFocus.tryRequestFocus()
+        // L'aide s'arrête (bouton, ou l'aidant a cliqué « Terminer ») : l'écran du code se ferme tout seul.
+        remote.state.first { it.status == Status.OFF }
+        onClose()
     }
     Page("Aide à distance") {
         Text(
@@ -71,12 +75,12 @@ fun RemoteAccessScreen(onClose: () -> Unit, viewModel: RemoteAccessViewModel = h
         state.event?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MyTvColors.Success) }
         Text(
             "L'aide reste active pendant que tu utilises MyTV (bandeau rouge en haut de l'écran). " +
-                "Elle s'arrête avec le bouton ci-dessous, en quittant MyTV, ou après 30 min sans connexion.",
+                "Elle s'arrête toute seule quand la personne qui t'aide a terminé, en quittant MyTV, ou avec le bouton ci-dessous.",
             style = MaterialTheme.typography.bodyMedium,
             color = MyTvColors.OnSurfaceMuted,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = { remote.stop(); onClose() }, modifier = Modifier.focusRequester(stopFocus)) { Text("Arrêter l'aide") }
+            Button(onClick = { remote.stop() }, modifier = Modifier.focusRequester(stopFocus)) { Text("Arrêter l'aide") }
             OutlinedButton(onClick = onClose) { Text("Retour") }
         }
     }

@@ -59,7 +59,7 @@ import javax.inject.Singleton
  * n'est envoyée que si elle a changé. Tout le travail se fait sur un seul thread dédié.
  *
  * L'aide reste active pendant qu'on navigue dans MyTV (bandeau rouge affiché partout), et
- * s'arrête quand le client l'arrête, quitte l'appli, ou après 30 min sans personne de connecté.
+ * s'arrête quand le client l'arrête, quitte l'appli, quand l'aidant clique « Terminer », 5 min après son départ, ou après 30 min sans personne de connecté.
  */
 @Singleton
 class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
@@ -180,7 +180,7 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
                 // Messages du relais lui-même (non chiffrés) : présence de l'autre côté.
                 h.post {
                     val m = runCatching { JSONObject(text) }.getOrNull() ?: return@post
-                    if (m.optString("relay") == "peer" && !m.optBoolean("up")) peerLeft(null)
+                    if (m.optString("relay") == "peer" && !m.optBoolean("up")) peerLeft()
                 }
             }
 
@@ -206,7 +206,7 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
         private fun lost(socket: WebSocket, vpn: Boolean) {
             if (closed || socket !== ws) return
             ws = null
-            peerLeft(null)
+            peerLeft()
             status(if (vpn) Status.VPN_REQUIRED else Status.OFFLINE)
             h.postDelayed({ open() }, backoff)
             backoff = (backoff * 2).coerceAtMost(30_000L)
@@ -246,18 +246,20 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
                         }
                     }
                 }
-                "bye" -> peerLeft("La personne qui t'aide a terminé.")
+                // L'aidant a cliqué « Terminer » : l'aide s'arrête complètement (le bandeau disparaît).
+                "bye" -> main.post { if (session === this) stop() }
             }
         }
 
-        private fun peerLeft(message: String?) {
+        private fun peerLeft() {
             if (!peer) return
             peer = false
             h.removeCallbacks(tick)
             status(Status.WAITING)
-            event(message ?: "La personne qui t'aide s'est déconnectée.")
+            event("La personne qui t'aide s'est déconnectée.")
+            // Fenêtre fermée sans « Terminer » : on lui laisse quelques minutes pour revenir, puis tout s'arrête.
             h.removeCallbacks(autoStop)
-            h.postDelayed(autoStop, AUTO_STOP_MS)
+            h.postDelayed(autoStop, AUTO_STOP_AFTER_PEER_MS)
         }
 
         private fun info(msg: String, ok: Boolean) = h.post { sendJson(JSONObject().put("t", "info").put("msg", msg).put("ok", ok)) }
@@ -399,6 +401,7 @@ class RemoteControl @Inject constructor(baseClient: OkHttpClient) {
         private const val JPEG_QUALITY = 60
         private const val MAX_QUEUE = 256L * 1024
         private const val AUTO_STOP_MS = 30 * 60 * 1000L
+        private const val AUTO_STOP_AFTER_PEER_MS = 5 * 60 * 1000L
         private const val SALT = "mytv-remote-v1"
         private const val ITERATIONS = 20_000
         // Sans 0/O, 1/I/L, U : rien d'ambigu à lire au téléphone ou à recopier.

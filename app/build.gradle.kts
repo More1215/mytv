@@ -34,8 +34,8 @@ android {
         applicationId = "dev.mytv"
         minSdk = 25
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.0.8"
+        versionCode = 10
+        versionName = "1.0.9"
         // Relais de l'aide à distance (Cloudflare Worker du dossier relay/). En debug, on peut le
         // remplacer par un relais local via mytv.remoteRelay dans local.properties.
         buildConfigField("String", "REMOTE_RELAY", quoted(REMOTE_RELAY_PROD))
